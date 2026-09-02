@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!--
+  Content-Security-Policy (security addendum §2.3). The app is static, so this
+  meta tag is the only place a policy can live - GitHub Pages sets no headers.
+
+  script-src is 'self' with no 'unsafe-inline' and no 'unsafe-eval': every
+  script here is an external module file, and playhtml is vendored under
+  assets/vendor/ rather than pulled from a CDN (§2.4). An injected inline
+  <script> - the payload of any XSS - therefore cannot run.
+
+  connect-src names the real sync endpoint, read off the live WebSocket rather
+  than guessed: api.playhtml.fun over both https and wss.
+
+  style-src keeps 'unsafe-inline' because the ported mockup sets style
+  attributes; that cannot smuggle script. It deliberately does NOT list
+  unpkg.com, so playhtml's own request for an unpinned style.css is blocked -
+  see assets/vendor/playhtml-2.14.1/README.md.
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self';
+  connect-src 'self' https://api.playhtml.fun wss://api.playhtml.fun;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data:;
+  base-uri 'self';
+  form-action 'none';
+  object-src 'none'
+">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+<title>MMO Con BINGO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<!-- Add to Home Screen (ADR 0021). The manifest is what Android offers to
+     install; iOS ignores it for the icon and reads apple-touch-icon instead,
+     so both point at the same PNG. -->
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/icons/icon-512.png">
+<meta name="apple-mobile-web-app-title" content="Bingo">
+<meta name="theme-color" content="#2a0b3d">
+</head>
+<body>
+
+<!--
+  Data load failure (phase 6b of the tracker's JSON move). The reviewed lists
+  are fetched, not imported, so a network or 404 failure would otherwise leave a
+  blank page with the reason only in the console. Markup, revealed by
+  assets/data/load.js — never written by code (addendum section 2.2).
+-->
+<div class="loadfail" data-loadfail hidden role="alert">
+  <div class="loadfail__panel">
+    <p class="loadfail__head">Could not load the board</p>
+    <p class="loadfail__body">Some of the game's data did not arrive. This is usually the connection.</p>
+    <p class="loadfail__which" data-loadfail-list></p>
+    <button class="loadfail__go" type="button" data-loadfail-retry>Try again</button>
+  </div>
+</div>
+
+
+<!--
+  Ported from the Claude Design mockup (docs/design/DragonCon-Bingo.dc.html).
+  The mockup's phone bezel and fake 9:41 status bar are canvas furniture and
+  are deliberately NOT reproduced - this page IS the phone screen.
+
+  Structure is static; JS only fills text, toggles [hidden]/state classes, and
+  builds the 25 cells and the sheet lists. The day palette arrives as CSS
+  custom properties on <html> (see app.js applyPalette), so a day change is a
+  variable swap, not a re-render.
+-->
+
+<div class="app">
+
+  <div class="app__glow" aria-hidden="true"></div>
+  <div class="deco" aria-hidden="true">
+    <span class="deco__ring deco__ring--a"></span>
+    <span class="deco__ring deco__ring--b"></span>
+    <span class="deco__ring deco__ring--c"></span>
+    <span class="deco__dot deco__dot--a"></span>
+    <span class="deco__dot deco__dot--b"></span>
+    <span class="deco__dot deco__dot--c"></span>
+  </div>
+
+  <!--
+    Add to Home Screen (ADR 0021). It sits above the day so it is the first
+    thing on the page and the last thing in the way: a once-only control that
+    hides itself for good the moment the app is installed. It used to live at
+    the bottom of the readability sheet, which is somewhere nobody goes twice.
+
+    Two different things wear one label. Android fires beforeinstallprompt and
+    the button can do the install; iOS has no such event, so the only honest
+    control is a sentence saying where Apple put it. install.js picks which is
+    visible; both are markup (spec section 1).
+  -->
+  <div class="a2hs" data-a2hs hidden>
+    <button class="a2hs__btn" type="button" data-a2hs-btn hidden>Add to home screen</button>
+    <p class="a2hs__ios" data-a2hs-ios hidden>
+      To keep this one tap away: Share, then <strong>Add to Home Screen</strong>.
+    </p>
+  </div>
+
+  <header class="topbar">
+    <div class="idwrap">
+      <button class="idchip" type="button" data-id-chip aria-haspopup="dialog" aria-expanded="false">
+        <span class="idchip__dot" data-id-dot></span>
+        <span class="idchip__name" data-me>&nbsp;</span>
+      </button>
+      <div class="idmenu" data-id-menu role="dialog" aria-label="Your name" hidden>
+        <p class="idmenu__hint">Playing as</p>
+        <p class="idmenu__name" data-id-menu-name></p>
+        <button class="idmenu__reroll" type="button" data-id-reroll>Roll new name</button>
+        <!-- The way back to the first-run card (ADR 0025). It lives here rather
+             than on the board because the chrome budget is four controls
+             (ADR 0023), and because the card's second line is your name. -->
+        <button class="idmenu__how" type="button" data-intro-open>How this works</button>
+        <!-- Both consequences of a reroll, said before it happens: the old
+             stickers keep the old name, and the board order is seeded from the
+             name (ADR 0024), so a new name deals the squares again. -->
+        <p class="idmenu__note">Stickers you already placed keep your old name, and your squares get shuffled into a new order.</p>
+      </div>
+    </div>
+
+    <!-- Right-hand column of the top bar. Grouped so the counter's grid
+         column stays the middle one whether or not the archive badge shows. -->
+    <div class="topbar__end">
+      <span class="livepill" data-live-pill>
+        <span class="livepill__n" data-live-n>1</span>
+        <span class="livepill__label">LIVE</span>
+      </span>
+      <span class="badge badge--archive" data-archive-badge hidden>
+        <span class="badge__icon"></span>
+        <span class="badge__label">ARCHIVE</span>
+      </span>
+    </div>
+  </header>
+
+  <!-- Spec 10.5: hotel wifi fails silently; a missing status reads as "broken". -->
+  <div class="conn" data-conn data-state="connecting" hidden>
+    <span class="conn__dot" aria-hidden="true"></span>
+    <span class="conn__label" data-conn-label>Connecting…</span>
+  </div>
+
+  <!--
+    The board has closed for good (ADR 0036). It takes the connection strip's
+    place in the column rather than covering the board: the finished card is
+    the artifact and nothing should sit on top of it. The words are authored
+    per edition in day.js and set with textContent; there is no free text here
+    (spec section 1).
+  -->
+  <div class="closed" data-closed hidden aria-live="polite">
+    <span class="closed__label" data-closed-label></span>
+  </div>
+
+  <div class="stage" data-stage>
+    <!-- Inside the stage, and directly above the board's BINGO row: the day and
+         the game read as one heading. Both are flex children of the centred
+         column, so the pair moves together and can never overlap. -->
+    <div class="daystep">
+      <button class="daystep__arrow" type="button" data-day-prev aria-label="Previous day">&lsaquo;</button>
+      <span class="daystep__name" data-day-name>&nbsp;</span>
+      <button class="daystep__arrow" type="button" data-day-next aria-label="Next day">&rsaquo;</button>
+    </div>
+
+    <div class="stage__pan" data-pan>
+      <div class="hdr" data-hdr aria-hidden="true"></div>
+      <div class="grid" data-grid></div>
+    </div>
+
+    <button class="filterchip" type="button" data-filter-chip hidden>
+      <span data-filter-name></span><span class="filterchip__x">&times;</span>
+    </button>
+
+    <!--
+      A card that has not opened yet. Overlay, like the undo bar: it must not
+      sit in the column flex or showing it would shrink --k and resize the
+      board. The board stays legible through the blur on purpose - the point is
+      "come back for this", not "nothing to see". Past cards are NOT covered;
+      the finished board is the artifact (spec section 8).
+
+      "OPENS" and "at 4am Eastern" are markup; code only fills the day name and
+      the date (spec section 1).
+    -->
+    <div class="opensoon" data-opens hidden aria-live="polite">
+      <p class="opensoon__head">
+        <span class="opensoon__word">OPENS</span>
+        <span class="opensoon__day" data-opens-day></span>
+      </p>
+      <p class="opensoon__sub"><span data-opens-date></span> at 4am Eastern</p>
+    </div>
+
+    <!--
+      Before the con opens: the same overlay, but with a live countdown to the
+      unlock instead of a date. The board unlocks on the wall clock (isPreOpen),
+      not when this timer reaches zero, so a stalled display still opens on time.
+      The seven-segment digits are drawn by code (element + textContent only,
+      spec section 1); every word here is authored markup.
+    -->
+    <div class="opensoon opensoon--count" data-countdown-panel hidden aria-live="polite">
+      <p class="opensoon__head">
+        <span class="opensoon__word">OPENS IN</span>
+      </p>
+      <div class="seg7row" data-countdown aria-hidden="true"></div>
+      <p class="opensoon__sub">Thursday at midnight Eastern</p>
+    </div>
+
+    <!--
+      Undo (ADR 0030). Overlay, not a flex child: showing it must not shrink
+      --k and resize the board. It appears under the board's right corner once
+      this device has placed something, and stays there — each press takes back
+      the most recent sticker, however many that is. The word is markup; code
+      only sets how many are left to take back.
+    -->
+    <div class="undobar" data-undo hidden>
+      <div class="undobar__pill">
+        <button class="undobar__btn" type="button" data-undo-btn>
+          <span class="undobar__ico" aria-hidden="true">&#8635;</span>
+          <span class="undobar__word">UNDO</span>
+          <span class="undobar__n" data-undo-count aria-hidden="true"></span>
+        </button>
+        <button class="undobar__x" type="button" data-undo-dismiss aria-label="Hide undo">&times;</button>
+      </div>
+    </div>
+  </div>
+
+  <nav class="tabbar">
+    <!--
+      Your sticker, and how many of it you have left (ADR 0027, retiring 0013).
+      Tapping it opens the picker to change the sticker; tapping a square places
+      the one shown, so placing costs no menu trip after the first. The label is
+      markup, code only swaps the number and the emoji (spec section 1).
+    -->
+    <button class="capchip tabbar__cap" type="button" data-cap-chip aria-label="Your sticker, and how many are left today">
+      <span class="capchip__em" data-cap-emoji aria-hidden="true"></span>
+      <span class="capchip__n" data-cap-n>25</span>
+      <span class="capchip__label">LEFT</span>
+    </button>
+
+    <button class="tabbar__btn" type="button" data-open="filter" aria-label="Players">
+      <span class="ico ico--person" aria-hidden="true"><span></span><span></span></span>
+    </button>
+    <!-- The readability tab is hidden in the beta build (app.js): phase 6d
+         settled the look, so the options it offered are now one default.
+         The con build still mounts it. -->
+    <button class="tabbar__btn" type="button" data-open="read" aria-label="Readability" data-beta-hide>
+      <span class="ico ico--read"><span></span><span></span><span></span><span></span></span>
+    </button>
+    <button class="tabbar__btn" type="button" data-share aria-label="Share this board">
+      <span class="ico ico--share" aria-hidden="true"><span></span><span></span><span></span></span>
+    </button>
+    <button class="tabbar__btn" type="button" data-open="feedback" aria-label="Feedback" data-con-hide>
+      <span class="ico ico--speech" aria-hidden="true"><span></span><span></span></span>
+    </button>
+    <button class="tabbar__btn" type="button" data-stats-open aria-label="Scores">
+      <span class="ico ico--chart" aria-hidden="true"><span></span><span></span><span></span></span>
+    </button>
+  </nav>
+
+  <!-- Says the copy happened. Authored string in markup (spec section 1); the
+       share tab only unhides it and lets it fade. -->
+  <div class="toast" data-toast hidden role="status">Link copied</div>
+
+  <!-- The wording is fixed and the slot it sits in is a fixed height; board.js
+       sizes the type to fit. See .disclaimer in app.css. -->
+  <p class="disclaimer"><span class="disclaimer__txt" data-disclaimer>Unofficial fan-made project. Not affiliated with, endorsed by, or associated with Dragon Con. No tickets, schedules, or official information here.</span></p>
+
+</div>
+
+<!--
+  First run (ADR 0025). Shown once, and reachable for good from the name menu —
+  a splash seen once is a splash forgotten. Every line is authored and static,
+  so spec section 1 holds: this is a rule sheet, not user input. Only the name
+  is filled in by code.
+-->
+<div class="intro" data-intro hidden role="dialog" aria-label="How this works">
+  <div class="intro__panel">
+    <p class="intro__line intro__line--big">This is your Card</p>
+    <p class="intro__line">You are <strong data-intro-name></strong></p>
+    <p class="intro__line">Mark a square as complete by putting any emoji on it</p>
+    <p class="intro__line">This is a Massively Multiplayer Bingo Game. The other stickers belong to the other players</p>
+    <p class="intro__line intro__line--sign">have fun!</p>
+    <button class="intro__go" type="button" data-intro-close>Got it</button>
+  </div>
+</div>
+
+<div class="scrim" data-scrim hidden></div>
+
+<div class="sheet sheet--emoji" data-sheet="emoji" hidden>
+  <div class="sheet__grab"></div>
+  <div class="emojipick">
+    <div class="cats" data-cats></div>
+    <!--
+      Placement notices (ADR 0010 / 0012). The strings are markup, never sync
+      data - no free text anywhere in the app (spec section 1). They sit inside
+      the sheet, just above the emoji the user just tapped, so a blocked tap
+      explains itself where it happened; the sheet deliberately stays open.
+    -->
+    <div class="capnote" data-note="day" role="status" hidden>
+      That's all 25 for today — the board resets at 4am.
+    </div>
+    <div class="capnote" data-note="square" role="status" hidden>
+      You've already marked this square — pick another one.
+    </div>
+    <div class="emojiscroll" data-emojis></div>
+  </div>
+</div>
+
+<div class="sheet sheet--filter" data-sheet="filter" hidden>
+  <div class="sheet__grab"></div>
+  <!--
+    Search and favourites (ADR 0026). The search box is the one text input on
+    the board, and it is matching over a curated list rather than authoring:
+    nothing typed here is stored, synced, or rendered — it only decides which of
+    the already-approved names stay on screen. Spec section 1 holds.
+  -->
+  <div class="playerbar">
+    <input class="playerbar__find" type="search" data-player-find
+           placeholder="Find a player" aria-label="Find a player"
+           autocomplete="off" spellcheck="false" maxlength="40">
+    <button class="playerbar__favs" type="button" data-favs-only
+            aria-pressed="false" aria-label="Show only favourites">★</button>
+  </div>
+  <div class="playerlist" data-players></div>
+</div>
+
+<div class="sheet sheet--owners" data-sheet="owners" hidden>
+  <div class="sheet__grab"></div>
+  <div class="ownerhdr">
+    <span class="ownerhdr__coord" data-owner-coord></span>
+    <span class="ownerhdr__text" data-owner-text></span>
+  </div>
+  <div class="ownerlist" data-owner-list></div>
+</div>
+
+<!--
+  The day list. Nothing opens it in this build: the tab it hung off was spent on
+  the sticker counter (ADR 0023 caps the chrome at four controls), and the day
+  arrows above the board already travel. Kept mounted because sheets.js fills it
+  by name and the con build may want the tab back.
+-->
+<div class="sheet sheet--archive" data-sheet="archive" hidden>
+  <div class="sheet__grab"></div>
+  <div class="daylist" data-days></div>
+</div>
+
+<!--
+  Feedback (ADR 0015). Every string a player can send is one of the reviewed
+  topics in assets/data/feedback.js - there is no text input anywhere, here or
+  elsewhere (spec section 1). The heading and hint below are markup, like the
+  placement notices; code only fills the list and the counts.
+
+  Beta only: the whole feedback feature — the tab, this sheet, and the topic
+  vote — is for the pre-con dry run. The con build hides it (data-con-hide);
+  the beta build's free-text notebox below is hidden the other way (isBeta).
+-->
+<div class="sheet sheet--feedback" data-sheet="feedback" hidden data-con-hide>
+  <div class="sheet__grab"></div>
+  <div class="fbhdr">
+    <span class="fbhdr__title">How is this going?</span>
+    <span class="fbhdr__hint">Tap anything that fits. Tap again to take it back.</span>
+  </div>
+  <div class="fblist" data-feedback></div>
+
+  <!--
+    Free text, beta only (ADR 0016). This is the single field in the app that
+    accepts typed input; it amends spec section 1 for the beta build, and the
+    con build never shows it. Notes render with textContent only - there is no
+    HTML sink anywhere in assets/ (addendum section 2.2), so a note that looks
+    like markup renders as the characters of markup.
+  -->
+  <div class="notebox" data-notebox hidden>
+    <div class="sheet__rule"></div>
+    <label class="notebox__label" for="note-input">Or say it in your own words</label>
+    <textarea class="notebox__field" id="note-input" data-note-input rows="2"
+              maxlength="280" enterkeyhint="send"
+              placeholder="Anything you noticed…"></textarea>
+    <div class="notebox__row">
+      <span class="notebox__count" data-note-count aria-live="polite"></span>
+      <button class="notebox__send" type="button" data-note-send disabled>Send</button>
+    </div>
+    <p class="notebox__full" data-note-full role="status" hidden>
+      That's all the notes for now — delete one of yours to add another.
+    </p>
+    <div class="notelist" data-notes></div>
+  </div>
+</div>
+
+<div class="sheet sheet--read" data-sheet="read" hidden>
+  <div class="sheet__grab"></div>
+  <div class="modegrid" data-read-modes></div>
+  <div class="sheet__rule"></div>
+  <div class="modegrid modegrid--stack" data-stack-modes></div>
+</div>
+
+<!--
+  The stats screen (ADR 0020). Shell only: stats.js builds every pane, because
+  the three tabs are the same handful of blocks over different numbers, and one
+  of those blocks is a real board cell built by cell.js.
+-->
+<div class="stats" data-stats hidden role="dialog" aria-label="Scores">
+  <div class="stats__panel">
+    <div class="sheet__grab"></div>
+    <div class="stats__tabs" role="tablist">
+      <button class="stats__tab is-on" type="button" role="tab" data-stats-tab="day">DAY</button>
+      <button class="stats__tab" type="button" role="tab" data-stats-tab="all">ALL DAYS</button>
+      <button class="stats__tab" type="button" role="tab" data-stats-tab="every">EVERYONE</button>
+    </div>
+    <div class="stats__body" data-stats-body></div>
+    <div class="stats__acts">
+      <button class="act" type="button" data-stats-view>VIEW BOARD</button>
+      <button class="act act--share" type="button" data-stats-share>SHARE</button>
+    </div>
+  </div>
+</div>
+
+<!--
+  The share card. Painted on a canvas rather than screenshotted: a DOM-to-image
+  library needs a build step (hard rule 1) and could not load under this page's
+  script-src anyway. The note is markup; code only flips its state.
+-->
+<div class="shareview" data-shareview hidden>
+  <canvas width="1080" height="1350" data-sharecanvas></canvas>
+  <!-- Both messages are markup; code only sets data-state (spec section 1). -->
+  <p class="shareview__note" data-share-note>
+    <span class="shareview__msg shareview__msg--tap">Tap to close.</span>
+    <span class="shareview__msg shareview__msg--copied">Image copied — paste it anywhere.</span>
+  </p>
+</div>
+
+<script type="module" src="assets/js/app.js"></script>
+</body>
+</html>

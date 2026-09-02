@@ -1,0 +1,450 @@
+/* Admin console + passphrase gate (spec section 9, ADR 0003).
+ * Shares :root tokens / .app chrome from app.css. Coral (#ff6b57) is the
+ * admin accent from the mockup — not a day palette colour. */
+
+:root {
+  --admin: #ff6b57;
+}
+
+/* --- gate shell (shown before unlock; playhtml not yet initialised) -------- */
+
+.gate {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  padding-top: calc(24px + env(safe-area-inset-top));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  background: var(--bg-grad);
+  color: var(--lavender);
+  font-family: var(--font-body);
+}
+
+.gate__card {
+  width: min(360px, 100%);
+  padding: 28px 22px 24px;
+  border-radius: 18px;
+  background: rgba(231, 220, 244, 0.06);
+  box-shadow: 0 0 0 1px rgba(231, 220, 244, 0.14) inset;
+}
+
+.gate__title {
+  margin: 0 0 6px;
+  font: 700 46px/1 var(--font-display);
+  letter-spacing: 0.16em;
+  color: var(--admin);
+}
+
+/* The board this console writes to. Host and project path, never the room id. */
+.gate__where {
+  margin: 0 0 22px;
+  font: 500 12px/1.4 var(--font-body);
+  letter-spacing: 0.04em;
+  color: rgba(231, 220, 244, 0.5);
+  overflow-wrap: anywhere;
+}
+
+.gate__input {
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(20, 5, 30, 0.55);
+  color: var(--lavender);
+  font: 500 15px var(--font-body);
+  box-shadow: 0 0 0 1px rgba(231, 220, 244, 0.18) inset;
+  outline: none;
+}
+
+.gate__input:focus {
+  box-shadow: 0 0 0 1px var(--admin) inset;
+}
+
+.gate__btn {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 13px 0;
+  background: rgba(255, 107, 87, 0.2);
+  color: var(--admin);
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.16em;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255, 107, 87, 0.45) inset;
+}
+
+.gate__btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.gate__err {
+  margin: 12px 0 0;
+  font: 400 12px/1.4 var(--font-body);
+  color: var(--admin);
+  text-align: center;
+}
+
+/* --- admin console ---------------------------------------------------------
+ * Mockup was a ~390px phone. On a wide desktop, a 5×5 aspect-ratio grid would
+ * grow to viewport-width and shove CLEAR/NUKE below .app's overflow:hidden.
+ * Cap the heat map; pin actions to the bottom; list scrolls in the middle. */
+
+.admin {
+  animation: adminIn 0.18s ease;
+}
+
+@keyframes adminIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.admin__top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px 12px;
+}
+
+.admin__back {
+  border: 0;
+  background: none;
+  color: rgba(231, 220, 244, 0.75);
+  font: 400 21px/1 var(--font-display);
+  padding: 2px 6px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.admin__mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin__mark-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--admin);
+}
+
+.admin__mark-label {
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.22em;
+  color: var(--admin);
+}
+
+.admin__top-spacer { width: 30px; }
+
+.admin__stats {
+  flex: none;
+  padding: 0 16px 12px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  max-width: 520px;
+  width: 100%;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+.admin__stat {
+  padding: 9px 10px;
+  border-radius: 11px;
+  background: rgba(231, 220, 244, 0.07);
+  box-shadow: 0 0 0 1px rgba(231, 220, 244, 0.12) inset;
+}
+
+.admin__stat-n {
+  font: 700 19px var(--font-display);
+  color: #fff;
+}
+
+.admin__stat-n--live { color: #7ee06a; }
+
+.admin__stat-l {
+  font: 500 8px var(--font-display);
+  letter-spacing: 0.12em;
+  color: rgba(231, 220, 244, 0.42);
+}
+
+.admin__heat {
+  flex: none;
+  padding: 0 16px 8px;
+  max-width: 360px;
+  width: 100%;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+.admin__heat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 7px;
+  font: 500 8.5px var(--font-display);
+  letter-spacing: 0.16em;
+  color: rgba(231, 220, 244, 0.38);
+}
+
+.admin__heat-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin__heat-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.admin__heat-swatch--empty { background: rgba(231, 220, 244, 0.08); }
+.admin__heat-swatch--mid { background: rgba(247, 209, 23, 0.45); }
+.admin__heat-swatch--hot { background: #f7d117; }
+
+.admin__heat-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  /* Keep the 5×5 compact so CLEAR/NUKE stay on screen (was ~viewport-wide). */
+  width: min(100%, 280px);
+  margin-inline: auto;
+}
+
+.admin__heat-cell {
+  aspect-ratio: 1;
+  border-radius: 5px;
+  border: 0;
+  cursor: pointer;
+  font: 700 10px var(--font-display);
+  color: rgba(231, 220, 244, 0.3);
+  background: rgba(231, 220, 244, 0.08);
+  min-width: 0;
+  min-height: 0;
+}
+
+.admin__heat-cell.is-hot {
+  color: #2a0b3d;
+}
+
+.admin__heat-cell.is-picked {
+  background: var(--admin) !important;
+  color: #2a0b3d !important;
+  box-shadow: 0 0 0 2px rgba(255, 107, 87, 0.35);
+}
+
+.admin__picked {
+  flex: none;
+  margin: 6px auto 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 107, 87, 0.1);
+  box-shadow: 0 0 0 1px rgba(255, 107, 87, 0.3) inset;
+  max-width: 360px;
+  width: calc(100% - 32px);
+  box-sizing: border-box;
+}
+
+.admin__picked-coord {
+  font: 700 9px var(--font-display);
+  letter-spacing: 0.16em;
+  color: var(--admin);
+}
+
+.admin__picked-text {
+  font: 400 11.5px/1.3 var(--font-body);
+  color: rgba(231, 220, 244, 0.8);
+  padding: 3px 0 0;
+}
+
+.admin__list-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 16px;
+  max-width: 520px;
+  width: 100%;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+.admin__list-head {
+  position: sticky;
+  top: 0;
+  padding: 4px 2px;
+  font: 500 8.5px var(--font-display);
+  letter-spacing: 0.16em;
+  color: rgba(231, 220, 244, 0.38);
+  background: linear-gradient(#3d1152, #3d1152 70%, rgba(61, 17, 82, 0));
+  z-index: 1;
+}
+
+.admin__row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 4px;
+  border-bottom: 1px solid rgba(231, 220, 244, 0.07);
+}
+
+.admin__row-emoji {
+  font-size: 20px;
+  width: 24px;
+  text-align: center;
+  line-height: 1;
+}
+
+.admin__row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin__row-who {
+  font: 500 12.5px var(--font-display);
+  color: rgba(231, 220, 244, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin__row-where {
+  font: 400 10.5px var(--font-body);
+  color: rgba(231, 220, 244, 0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin__row-ago {
+  font: 400 10px var(--font-display);
+  color: rgba(231, 220, 244, 0.32);
+  flex: none;
+}
+
+.admin__row-x {
+  border: 0;
+  cursor: pointer;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(231, 220, 244, 0.08);
+  color: rgba(231, 220, 244, 0.65);
+  font: 400 14px/1 var(--font-display);
+  flex: none;
+}
+
+.admin__actions {
+  flex: none;
+  display: flex;
+  gap: 9px;
+  padding: 10px 16px 8px;
+  max-width: 520px;
+  width: 100%;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+.admin__clear {
+  flex: 1;
+  border: 0;
+  padding: 13px 0;
+  border-radius: 13px;
+  font: 700 11px var(--font-display);
+  letter-spacing: 0.16em;
+  background: rgba(231, 220, 244, 0.06);
+  color: rgba(231, 220, 244, 0.32);
+  cursor: default;
+}
+
+.admin__clear:not(:disabled) {
+  background: rgba(231, 220, 244, 0.12);
+  color: #e7dcf4;
+  cursor: pointer;
+}
+
+.admin__nuke {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  width: 112px;
+  border: 0;
+  cursor: pointer;
+  padding: 13px 0;
+  border-radius: 13px;
+  background: rgba(255, 107, 87, 0.14);
+  color: var(--admin);
+  font: 700 11px var(--font-display);
+  letter-spacing: 0.16em;
+  box-shadow: 0 0 0 1px rgba(255, 107, 87, 0.4) inset;
+  touch-action: none;
+  user-select: none;
+}
+
+.admin__nuke-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  background: rgba(255, 107, 87, 0.34);
+  transition: width 0.05s linear;
+  pointer-events: none;
+}
+
+.admin__nuke-label { position: relative; }
+
+.admin__footnote {
+  flex: none;
+  margin: 0 auto;
+  text-align: center;
+  padding: 0 30px 16px;
+  font: 400 8.2px/1.45 var(--font-body);
+  color: rgba(231, 220, 244, 0.3);
+  max-width: 520px;
+}
+
+/* --- post-con export (ADR 0036) ------------------------------------------ */
+
+.admin__export {
+  flex: none;
+  padding: 12px 16px 6px;
+  max-width: 520px;
+  width: 100%;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+.admin__export-btn {
+  width: 100%;
+  border: 0;
+  border-radius: 13px;
+  padding: 14px 0;
+  background: rgba(126, 224, 106, 0.15);
+  color: #7ee06a;
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.16em;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(126, 224, 106, 0.4) inset;
+}
+
+.admin__export-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.admin__export-note {
+  margin: 6px 0 0;
+  text-align: center;
+  font: 400 8.5px/1.45 var(--font-body);
+  color: rgba(231, 220, 244, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin { animation: none; }
+  .admin__nuke-fill { transition: none; }
+}

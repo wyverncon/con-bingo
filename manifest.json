@@ -1,0 +1,19 @@
+{
+  "name": "MMO Con BINGO",
+  "short_name": "Con BINGO",
+  "description": "A shared bingo card, filled in with emoji stickers.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#24092f",
+  "theme_color": "#2a0b3d",
+  "icons": [
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
