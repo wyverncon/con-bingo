@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<!--
+  Static end-of-con results page (spec section 8: the finished board is the
+  artifact). Unlike index.html / admin.html this page joins no room, fetches no
+  synced data, and takes no user input: every number, name and square text below
+  is baked in at publish time from the archived board. Names come from the
+  curated word lists and square texts are organizer-authored; both are HTML-
+  escaped on output anyway (see esc() in the script). Because nothing untrusted
+  can reach the DOM here, the board's no-innerHTML sink ban (hard rule 10) does
+  not apply — this page is not in tools/SECURITY-CHECKS.md's grep scope, and its
+  inline script is why the CSP below permits 'unsafe-inline' where the board's
+  does not. See ADR 0040.
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline';
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data:;
+  base-uri 'self';
+  form-action 'none';
+  object-src 'none'
+">
+<title>2026 D-Con Bingo Results</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap">
+<style>
+:root{
+  --base:#24092f;
+  --surface:#341049; --surface-2:#43195f; --raise:#4d1e6b;
+  --ink:#f4edfb; --ink-2:rgba(231,220,244,.74); --muted:rgba(231,220,244,.46);
+  --line:rgba(231,220,244,.14); --grid:rgba(231,220,244,.10);
+  --gold:#f7d117; --pink:#ff6fae; --teal:#18dcc0; --green:#7ee06a; --purple:#b483e6; --sky:#6fb8ff; --amber:#ffa24d; --mythic:#ff8a3d;
+  --hot:#ff8a3d; --cold:#5aa9ff;
+  --stick:#f7d117; --play:#18dcc0;
+  --shadow:0 2px 4px rgba(12,3,20,.4),0 14px 40px rgba(12,3,20,.5);
+  --font-d:"Space Grotesk",ui-monospace,monospace;
+  --font-b:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  /* light geometric texture used behind cards — single cheap layer (a heavier
+     multi-gradient version plus a fixed body background were dropped: on mobile
+     they composited on every card and helped push the page to a crash) */
+  --geo: radial-gradient(rgba(231,220,244,.05) 1px, transparent 1.4px);
+  --geo-size:16px 16px;
+}
+*{box-sizing:border-box}
+html{background:var(--base)}
+body{color:var(--ink);font:400 15.5px/1.55 var(--font-b);-webkit-font-smoothing:antialiased;
+  background:linear-gradient(178deg,#2a0b3d 0%,#3d1152 46%,#24092f 100%);background-color:var(--base);background-attachment:scroll;}
+.wrap{max-width:1080px;margin:0 auto;padding:clamp(22px,4vw,52px) clamp(15px,4vw,38px) 90px;}
+.tnum{font-variant-numeric:tabular-nums;}
+.backlink{display:inline-flex;align-items:center;gap:7px;margin:0 0 24px;font-family:var(--font-d);font-weight:600;font-size:13px;color:var(--gold);text-decoration:none;border:1px solid rgba(247,209,23,.45);padding:9px 15px;border-radius:11px;}
+.backlink:hover{background:rgba(247,209,23,.1);}
+.eyebrow{font-family:var(--font-d);font-size:13px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold);font-weight:600;margin:0 0 18px;}
+h1{font-family:var(--font-d);font-weight:700;font-size:clamp(28px,4.6vw,50px);line-height:1.06;letter-spacing:-.01em;margin:0;max-width:20ch;text-wrap:balance;color:var(--ink);}
+.lede{color:var(--ink-2);font-size:clamp(15px,2vw,18px);max-width:56ch;margin:20px 0 0;}
+section{margin-top:clamp(48px,7vw,80px);}
+h2{font-family:var(--font-d);font-weight:700;font-size:clamp(24px,3.6vw,34px);letter-spacing:-.01em;margin:0 0 6px;line-height:1.05;color:var(--ink);}
+.sub{color:var(--muted);font-size:14.5px;margin:0 0 20px;max-width:64ch;}
+.card{position:relative;background:var(--surface);background-image:var(--geo);background-size:var(--geo-size);
+  border:1px solid var(--line);border-radius:18px;padding:clamp(16px,2.6vw,26px);box-shadow:var(--shadow);}
+/* headline strip */
+.strip{display:flex;flex-wrap:wrap;gap:12px;margin-top:34px;}
+.stat{flex:1 1 158px;background:var(--surface);background-image:var(--geo);background-size:var(--geo-size);
+  border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px;box-shadow:var(--shadow);}
+.stat b{display:block;font-family:var(--font-d);font-weight:700;font-size:clamp(30px,4.4vw,42px);line-height:1;color:var(--ink);font-variant-numeric:tabular-nums;}
+.stat b small{font-size:16px;color:var(--muted);font-weight:500;}
+.stat span{display:block;margin-top:9px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);font-family:var(--font-d);font-weight:500;}
+/* square renders — most / least side by side */
+.sqcols{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+@media(max-width:640px){.sqcols{grid-template-columns:1fr;}}
+.sqhead{display:flex;align-items:center;gap:10px;margin:0 0 12px;font-family:var(--font-d);font-weight:600;font-size:14px;letter-spacing:.08em;text-transform:uppercase;}
+.sqhead.hot{color:var(--hot);} .sqhead.cold{color:var(--cold);}
+.sqhead i{flex:1;height:1px;background:currentColor;opacity:.35;}
+.sqlist{display:flex;flex-direction:column;gap:10px;}
+.sqitem{display:flex;align-items:center;gap:12px;background:var(--surface);background-image:var(--geo);background-size:var(--geo-size);
+  border:1px solid var(--line);border-radius:13px;padding:10px 13px;box-shadow:var(--shadow);}
+.sqchip{width:54px;height:54px;flex:none;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(120% 120% at 50% 32%, #1e0b2b, #100519);font-size:28px;}
+.sqchip .em{filter:drop-shadow(0 2px 4px rgba(0,0,0,.55));transform:rotate(-7deg);display:block;}
+.sqcol.hot .sqchip{box-shadow:inset 0 0 0 3px var(--hot),inset 0 0 15px 2px rgba(255,138,61,.42);}
+.sqcol.cold .sqchip{box-shadow:inset 0 0 0 3px var(--cold),inset 0 0 15px 2px rgba(90,169,255,.36);}
+.sqitem .txt{flex:1;min-width:0;font-size:13.5px;line-height:1.3;color:var(--ink);}
+.sqitem .txt b{display:block;font-family:var(--font-d);font-weight:500;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-top:3px;}
+.sqitem .cnt{font-family:var(--font-d);font-weight:700;font-size:20px;font-variant-numeric:tabular-nums;}
+.sqitem .cnt small{font-size:11px;font-weight:500;opacity:.6;}
+.sqcol.hot .cnt{color:var(--hot);} .sqcol.cold .cnt{color:var(--cold);}
+/* game-style tiles */
+.tilerow{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;}
+.tile{flex:0 1 190px;position:relative;overflow:hidden;border-radius:16px;padding:22px 18px;text-align:center;
+  border:1px solid var(--line);background:var(--surface-2);background-image:var(--geo);background-size:var(--geo-size);box-shadow:var(--shadow);}
+.tile__n{font-family:var(--font-d);font-weight:700;font-size:clamp(38px,5.4vw,54px);line-height:.9;color:var(--ink);font-variant-numeric:tabular-nums;}
+.tile__ico{font-size:24px;line-height:1;opacity:.85;margin-bottom:10px;display:block;}
+.tile__label{margin-top:12px;font-family:var(--font-d);font-weight:600;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);}
+.tile--gold{border-color:rgba(247,209,23,.5);background-color:rgba(247,209,23,.1);}
+.tile--gold .tile__n{color:var(--gold);text-shadow:0 0 22px rgba(247,209,23,.4);}
+.tile--teal{border-color:rgba(24,220,192,.45);background-color:rgba(24,220,192,.08);}
+.tile--teal .tile__n{color:var(--teal);}
+.tile--pink{border-color:rgba(255,111,174,.45);background-color:rgba(255,111,174,.08);}
+.tile--pink .tile__n{color:var(--pink);}
+.tile--star{border-color:rgba(247,209,23,.5);background-color:rgba(255,111,174,.08);}
+.tile--star .tile__n{color:var(--gold);text-shadow:0 0 22px rgba(247,209,23,.45);}
+/* emoji tower chart — grouped and colored by day */
+.tower-scroll{overflow-x:auto;overflow-y:hidden;padding:6px 2px 0;-webkit-overflow-scrolling:touch;}
+/* The tower chart is one <canvas> (id="towers"), not hundreds of emoji nodes:
+   ~1,100 live emoji elements crashed mobile webviews. See the script below. */
+#towers{display:block;}
+.tday{--dayc:#f7d117;display:flex;flex-direction:column;border-radius:12px;padding:0 6px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--dayc) 13%,transparent),color-mix(in srgb,var(--dayc) 3%,transparent) 55%,transparent);}
+.tdaytitle{font-family:var(--font-d);font-weight:700;font-size:15px;letter-spacing:.02em;text-align:center;
+  color:var(--dayc);padding:8px 6px;border-bottom:2px solid var(--dayc);white-space:nowrap;}
+.tdaycols{display:flex;align-items:flex-end;gap:2px;min-height:500px;padding:10px 0 0;}
+.tcol{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;position:relative;padding:0 2px 24px;min-width:26px;}
+.tstack{display:flex;flex-direction:column-reverse;align-items:center;}
+.tstack .g{font-size:16px;line-height:1.02;}
+.tstack .more{font-family:var(--font-d);font-weight:700;font-size:11px;color:var(--dayc);margin-bottom:2px;}
+.tcol .hr{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);font-family:var(--font-d);font-size:11px;color:var(--muted);white-space:nowrap;}
+.scrollhint{font-family:var(--font-d);font-size:11.5px;color:var(--muted);letter-spacing:.05em;margin:10px 2px 0;text-transform:uppercase;}
+/* charts (kept, SVG) */
+figure{margin:0;}
+svg{display:block;width:100%;height:auto;overflow:visible;}
+.axis{fill:var(--muted);font-family:var(--font-d);font-size:13.5px;font-weight:500;}
+.gridline{stroke:var(--grid);stroke-width:1;}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin:16px 0 0;font-size:13.5px;color:var(--ink-2);align-items:center;}
+.legend span{display:inline-flex;align-items:center;gap:7px;}
+.legend i{width:13px;height:13px;border-radius:4px;display:inline-block;}
+/* daily stats */
+.daygrp{display:flex;flex-direction:column;gap:8px;padding:14px 0;border-bottom:1px solid var(--line);}
+.daygrp:last-child{border-bottom:0;}
+.daygrp .dn{font-family:var(--font-d);font-weight:700;font-size:19px;color:var(--ink);}
+.dbar{display:flex;align-items:center;gap:12px;}
+.dbar .track{flex:1;height:22px;background:rgba(231,220,244,.08);border-radius:6px;overflow:hidden;min-width:40px;}
+.dbar .fill{height:100%;border-radius:6px;}
+.dbar .fill--s{background:linear-gradient(90deg,#f7d117,#ffcf40);}
+.dbar .fill--p{background:linear-gradient(90deg,#18dcc0,#4fe9d4);}
+.dbar .vlab{font-family:var(--font-d);font-weight:600;font-size:13.5px;color:var(--ink-2);white-space:nowrap;min-width:104px;font-variant-numeric:tabular-nums;}
+/* category / emoji bars */
+.bars{display:flex;flex-direction:column;gap:10px;}
+.brow{display:grid;grid-template-columns:118px 1fr 46px;align-items:center;gap:14px;}
+.brow .lbl{font-size:14px;color:var(--ink-2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.brow .lbl .em{font-size:20px;}
+.brow .track{background:rgba(231,220,244,.08);border-radius:6px;height:24px;overflow:hidden;}
+.brow .fill{height:100%;border-radius:6px;}
+.brow .val{font-family:var(--font-d);font-weight:600;font-size:14px;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums;}
+/* roster */
+.roster-wrap{overflow-x:auto;}
+.roster{min-width:600px;}
+.rhead,.prow{display:grid;grid-template-columns:36px 34px 1.6fr 1fr 60px 56px 54px 62px;align-items:center;gap:10px;}
+.rhead{padding:0 12px 10px;font-family:var(--font-d);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+.rhead .r{text-align:right;}
+.roster-scroll{max-height:460px;overflow-y:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface);background-image:var(--geo);background-size:var(--geo-size);}
+.prow{padding:9px 12px;border-bottom:1px solid var(--line);width:100%;text-align:left;background:transparent;border-left:0;border-right:0;border-top:0;color:inherit;font:inherit;cursor:pointer;}
+.prow:last-child{border-bottom:0;}
+.prow:hover,.prow:focus-visible{background:rgba(231,220,244,.06);outline:none;}
+.prow:focus-visible{box-shadow:inset 0 0 0 2px var(--gold);}
+.prow .rk{font-family:var(--font-d);font-weight:600;color:var(--muted);font-size:13px;text-align:center;}
+.prow .pe{font-size:19px;text-align:center;}
+.prow .nm{font-weight:600;font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.prow .sk{display:flex;align-items:center;gap:8px;}
+.prow .sk .t{flex:1;height:14px;background:rgba(231,220,244,.08);border-radius:4px;overflow:hidden;min-width:30px;}
+.prow .sk .f{height:100%;background:linear-gradient(90deg,#9b5dc4,#f7d117);border-radius:4px;}
+.prow .sk .n{font-family:var(--font-d);font-weight:600;font-size:13.5px;font-variant-numeric:tabular-nums;color:var(--ink-2);min-width:26px;text-align:right;}
+.prow .c{font-family:var(--font-d);font-weight:600;font-size:14px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2);}
+.prow .c.z{color:rgba(231,220,244,.22);}
+.prow.top5{background:linear-gradient(90deg,rgba(247,209,23,.11),transparent);border-left:3px solid var(--gold);}
+.prow.top5 .nm{color:var(--gold);}.prow.top5 .rk{color:var(--gold);}
+.prow.mythic{background:linear-gradient(90deg,rgba(255,138,61,.22),transparent);border-left:3px solid var(--mythic);}
+.prow.mythic .nm{color:var(--mythic);text-shadow:0 0 16px rgba(255,138,61,.45);}
+.prow.mythic .rk{color:var(--mythic);}
+/* modal */
+.ovl{position:fixed;inset:0;z-index:60;background:rgba(10,3,18,.72);backdrop-filter:blur(3px);
+  display:flex;align-items:flex-start;justify-content:center;padding:5vh 16px;overflow-y:auto;opacity:0;pointer-events:none;transition:opacity .18s;}
+.ovl.on{opacity:1;pointer-events:auto;}
+.modal{width:100%;max-width:560px;background:var(--surface);background-image:var(--geo);background-size:var(--geo-size);
+  border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:24px;transform:translateY(10px) scale(.98);transition:transform .18s;}
+.ovl.on .modal{transform:none;}
+.mclose{position:absolute;top:5vh;right:calc(50% - 280px + 12px);}
+.modal .mx{float:right;background:transparent;border:1px solid var(--line);color:var(--ink-2);border-radius:9px;width:34px;height:34px;font-size:17px;cursor:pointer;}
+.modal .mx:hover{background:rgba(231,220,244,.08);}
+.mhead{display:flex;align-items:center;gap:14px;}
+.mhead .me{font-size:44px;line-height:1;filter:drop-shadow(0 3px 6px rgba(0,0,0,.5));}
+.mhead h3{font-family:var(--font-d);font-weight:700;font-size:22px;margin:0;color:var(--ink);}
+.mhead .rank{font-family:var(--font-d);font-size:13px;color:var(--gold);font-weight:600;margin-top:3px;}
+.mhead .rank.mythic{color:var(--mythic);}
+.mbadge{display:inline-block;margin-left:8px;font-family:var(--font-d);font-size:10px;font-weight:700;letter-spacing:.05em;
+  color:#2a0b3d;background:var(--gold);padding:2px 8px;border-radius:99px;vertical-align:2px;}
+.mkpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:20px 0 6px;}
+.mkpi{background:rgba(231,220,244,.06);border:1px solid var(--line);border-radius:12px;padding:12px 8px;text-align:center;}
+.mkpi b{display:block;font-family:var(--font-d);font-weight:700;font-size:24px;color:var(--ink);font-variant-numeric:tabular-nums;}
+.mkpi span{display:block;margin-top:4px;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-family:var(--font-d);}
+.mline{color:var(--ink-2);font-size:13.5px;margin:12px 0 0;}
+.mline b{color:var(--ink);}
+.mtable{width:100%;border-collapse:collapse;margin-top:16px;font-size:13.5px;}
+.mtable th,.mtable td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;}
+.mtable th{color:var(--muted);font-family:var(--font-d);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase;}
+.mtable th:first-child,.mtable td:first-child{text-align:left;font-family:var(--font-d);font-weight:600;color:var(--ink);}
+.mtable td.z{color:rgba(231,220,244,.24);}
+.mshare{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;}
+.btn{display:inline-block;background:linear-gradient(150deg,#f7d117,#ffb638);color:#2a0b3d;font-family:var(--font-d);font-weight:700;font-size:14px;letter-spacing:.02em;padding:11px 18px;border-radius:11px;text-decoration:none;border:0;cursor:pointer;}
+.btn:hover{filter:brightness(1.06);}
+.btn--ghost{background:transparent;color:var(--gold);border:1.5px solid rgba(247,209,23,.6);}
+.toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(20px);z-index:70;background:#150520;border:1px solid var(--line);color:var(--ink);font-family:var(--font-d);font-size:13px;padding:10px 16px;border-radius:10px;opacity:0;transition:.2s;box-shadow:var(--shadow);}
+.toast.on{opacity:1;transform:translateX(-50%);}
+/* forms */
+.thanks-copy{color:var(--ink-2);font-size:16px;max-width:60ch;margin:0 0 8px;}
+.forms{display:grid;grid-template-columns:1fr;gap:16px;margin-top:24px;}
+@media(min-width:720px){.forms{grid-template-columns:1.4fr 1fr;}}
+.fcard{background:var(--surface);background-image:var(--geo);background-size:var(--geo-size);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow);}
+.fcard h3{font-family:var(--font-d);font-weight:600;font-size:17px;margin:0 0 4px;color:var(--ink);}
+.fcard p{color:var(--muted);font-size:13.5px;margin:0 0 14px;}
+label{display:block;font-family:var(--font-d);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 7px;}
+textarea,input[type=email]{width:100%;background:#1e0a2b;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font:400 15px/1.5 var(--font-b);}
+textarea{min-height:112px;resize:vertical;}
+textarea:focus,input:focus{outline:2px solid var(--gold);outline-offset:1px;border-color:transparent;}
+.fcard .btn{margin-top:13px;}
+.fnote{font-size:12px;color:var(--muted);margin-top:10px;}
+footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--line);}
+.disclaimer{color:var(--muted);font-size:12.5px;font-family:var(--font-d);letter-spacing:.02em;max-width:70ch;line-height:1.6;}
+@media(max-width:520px){
+  .brow{grid-template-columns:92px 1fr 40px;gap:9px;}
+  .dbar .vlab{min-width:92px;font-size:12.5px;}
+  .mkpis{grid-template-columns:repeat(2,1fr);}
+  .modal{padding:18px;}
+}
+/* colorful modal accents */
+.mtop{height:5px;border-radius:99px;margin:0 0 16px;background:linear-gradient(90deg,var(--sig,#f7d117),transparent);}
+.mhead{padding:14px;border-radius:14px;background:linear-gradient(120deg,color-mix(in srgb,var(--sig,#f7d117) 26%,transparent),transparent);}
+.mkpi--g b{color:var(--gold);} .mkpi--p b{color:var(--pink);} .mkpi--t b{color:var(--teal);} .mkpi--u b{color:var(--purple);}
+.mkpi--g{background:rgba(247,209,23,.1);border-color:rgba(247,209,23,.32);}
+.mkpi--p{background:rgba(255,111,174,.1);border-color:rgba(255,111,174,.32);}
+.mkpi--t{background:rgba(24,220,192,.1);border-color:rgba(24,220,192,.32);}
+.mkpi--u{background:rgba(180,131,230,.12);border-color:rgba(180,131,230,.34);}
+.mtable thead th{color:var(--sig,#f7d117);opacity:.85;}
+.mline b{color:var(--sig,#f4edfb);}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <a class="backlink" href="index.html">&larr; Back to the bingo board</a>
+  <p class="eyebrow">2026 D-Con Bingo Results</p>
+  <h1>Thank you all for playing this Massively Multiplayer Bingo! Here's how you all did this long weekend.</h1>
+
+  <div class="strip" id="strip"></div>
+
+  <section>
+    <h2>Most &amp; least tagged squares</h2>
+    <p class="sub">The five squares everyone stamped, and the five almost nobody reached. Orange ran hot, blue ran cold.</p>
+    <div class="sqcols">
+      <div class="sqcol hot"><div class="sqhead hot"><span>Most tagged</span><i></i></div><div class="sqlist" id="sqHot"></div></div>
+      <div class="sqcol cold"><div class="sqhead cold"><span>Least tagged</span><i></i></div><div class="sqlist" id="sqCold"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Bingos, corners, borders &amp; blackouts</h2>
+    <p class="sub">A card holds twelve possible lines. Corners, border and blackout are one-per-card feats.</p>
+    <div class="tilerow" id="bingotiles"></div>
+  </section>
+
+  <section>
+    <h2>Emoji placed by hour</h2>
+    <p class="sub">Every emoji stamped that hour, stacked into towers. Thursday afternoon is a wall of dinosaurs.</p>
+    <div class="card">
+      <div class="tower-scroll"><canvas id="towers"></canvas></div>
+      <p class="scrollhint">← scroll sideways to walk the weekend hour by hour →</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Daily Stats</h2>
+    <div class="card" id="days"></div>
+    <div class="legend">
+      <span><i style="background:var(--stick)"></i>Stickers</span>
+      <span><i style="background:var(--play)"></i>Players</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>New vs returning players</h2>
+    <div class="card"><figure><svg id="ret" viewBox="0 0 1000 320" role="img" aria-label="New and returning players per day"></svg></figure>
+      <div class="legend">
+        <span><i style="background:var(--play)"></i>New that day</span>
+        <span><i style="background:var(--purple)"></i>Returning</span>
+      </div></div>
+  </section>
+
+  <section>
+    <h2>Dinosaurs won</h2>
+    <p class="sub">Animals, Dinosaurs and Dragons in particular, dominated the board. Perhaps Trogdor influenced this?</p>
+    <div class="card" style="display:grid;gap:28px">
+      <div class="bars" id="cats"></div>
+      <div><p class="sub" style="margin:0 0 14px">Top 12 emoji, by placements</p><div class="bars" id="emoji"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Every player</h2>
+    <p class="sub">All 52 players, ranked by stickers. Tap any player for their full weekend. Top five are highlighted; the champion glows orange.</p>
+    <div class="roster-wrap"><div class="roster">
+      <div class="rhead"><span></span><span></span><span>Player</span><span>Stickers</span><span class="r">Bingo</span><span class="r">◈</span><span class="r">▣</span><span class="r">★</span></div>
+      <div class="roster-scroll" id="roster"></div>
+    </div></div>
+  </section>
+
+  <section>
+    <h2>Thank you!</h2>
+    <p class="thanks-copy">Thank you all for giving this experiment a shot. It seems like everyone had a great time.
+    <strong>D-Con Bingo will be back for 2027!</strong> If you have any feedback, suggestions, or tile ideas, send them my way.</p>
+    <div class="forms">
+      <div class="fcard">
+        <h3>Feedback, suggestions &amp; tile ideas</h3>
+        <p>Tell me what worked, what didn't, and what squares you want next year.</p>
+        <label for="fb">Your message</label>
+        <textarea id="fb" placeholder="Loved it! One idea for a square..."></textarea>
+        <a class="btn" id="fbSend" href="mailto:WyvernconTCG@gmail.com?subject=D-con%2026%20bingo%20feedback">Email your feedback</a>
+        <p class="fnote">Opens your email app to WyvernconTCG@gmail.com.</p>
+      </div>
+      <div class="fcard">
+        <h3>Play in 2027</h3>
+        <p>Want to be included for the 2027 Bingo? Drop your email and I'll reach out.</p>
+        <label for="su">Your email</label>
+        <input id="su" type="email" placeholder="you@example.com" autocomplete="email">
+        <a class="btn btn--ghost" id="suSend" href="mailto:WyvernconTCG@gmail.com?subject=D-Con%2027%20Bingo%20signup&amp;body=Please%20include%20me%20in%20the%202027%20Bingo.">Sign me up for 2027</a>
+        <p class="fnote">Opens your email app to WyvernconTCG@gmail.com.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p class="disclaimer">Unofficial fan-made project. Not affiliated with, endorsed by, or associated with Dragon Con. No tickets, schedules, or official information here.</p>
+  </footer>
+</div>
+
+<div class="ovl" id="ovl"><div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Player stats"></div></div>
+<div class="toast" id="toast">Copied to clipboard</div>
+
+<script>
+const D={
+ strip:[{n:1283,suf:"",sm:"",label:"stickers placed"},{n:52,suf:"",sm:"",label:"players"},{n:29,suf:"",sm:"<small>&thinsp;/ 280</small>",label:"emoji used"},{n:92,suf:"",sm:"",label:"peak stickers / hour"},{n:6,suf:"",sm:"",label:"players played all 5 days"},{n:34,suf:"%",sm:"",label:"of stickers by top 10% of players"}],
+ hot:[{"day":"Thu","n":34,"text":"Wear deodorant","emoji":"🐉"},{"day":"Thu","n":28,"text":"Marriott Carpet Cosplay","emoji":"🦖"},{"day":"Thu","n":28,"text":"Pick up badge","emoji":"🦖"},{"day":"Thu","n":27,"text":"NERDS Spotted","emoji":"🦖"},{"day":"Thu","n":27,"text":"Line wraps around building","emoji":"🦖"}],
+ cold:[{"day":"Sun","n":1,"text":"Photo of you and someone dabbing","emoji":"🐉"},{"day":"Mon","n":2,"text":"Empty Artist Alley table","emoji":"🌸"},{"day":"Sun","n":2,"text":"Get anime recommendation from stranger","emoji":"🦄"},{"day":"Sat","n":2,"text":"Leave offering at John shrine","emoji":"✨"},{"day":"Sat","n":2,"text":"Visit Con suite","emoji":"🍤"}],
+ bingo:[{cls:"tile--gold",ico:"◆",n:152,label:"Bingos"},{cls:"tile--teal",ico:"◈",n:12,label:"Four corners"},{cls:"tile--pink",ico:"▣",n:2,label:"Borders"},{cls:"tile--star",ico:"★",n:2,label:"Blackouts"}],
+ towers:[{"wd":"Thu","h":0,"list":["🐍","🚀","🚀","🚀","🚀","🐉","🐉","🐉","🦄","🦄","✨","✨","✨"]},{"wd":"Thu","h":8,"list":["🌺","🔮","🔮","🔮","🔮","🍤","🔮","🍤","🍤","🍤","🍤","🍤","🍤","🍤","🔮","🔮"]},{"wd":"Thu","h":9,"list":["🚀","🚀","🐧","🐧","🐧","🐧","🐧","🐧","🐧","🍤","🍤"]},{"wd":"Thu","h":10,"list":["🦑","🦑","🦑","🦑","🦑","🦑","🦑","🦑","🐉","🐍","🐍","⚔️","🐍","🐍","🐉","🐉","🐧","🐉","🔮","🐉","🐉","🐉","🐢","🐢","🐉","🔮","🔮","🐢","🐉","🐢","🐢","🐢","🐉","🐉","🐢","🐉","🚀","🚀","🚀","🚀","🚀","🚀"]},{"wd":"Thu","h":11,"list":["⚔️","✨","🦑"]},{"wd":"Thu","h":12,"list":["🦖","🐧","🦖","🦖","🦖","🎱","🦖","🎱","🦖","🦖","🐧","🦖","🎱","🦖","🦖","🦖","🦖","🎱","🎱","🔮","🦄","🌳","🦖","🔮","🍤","🐉","🐉","🐉","🏹","🏹","🦆","🦆","🦆","🦆","🦄","🦆","🐉","🦆","🏹","🐉","🐉","🚀"]},{"wd":"Thu","h":13,"list":["🦄","🦄","🦄","🦄","🦄","🦄","🦊","🦊","🦊","🦊","🦊","🦊","🦊","🦊","🍤","🐉","🐉","🦊","🦄","🦄","🦄","🦄","🦄","🎱","🎱","🐉","🎱","🔮","🦄","🔮","🍤","🐉","🦄","🦄","🦄","🦄","🦄","🦄","🦖","🦖","🦖","🦖","🦖","🐍","🦄","🐍","🦄","🐍","🦖","🦖","🦄","🦖","🐍","🦖","🦖","🐍","🐍","🐍","🦖","🦖","🐍","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦄","🐍","🦖","🦄","🐍","🦖","🦄","🦖","🦄","🔮","🔮","🔮","🔮","🔮","🔮","🔮","🦄","🔮","🔮","🔮","🦖","🦖","🎱","🦖"]},{"wd":"Thu","h":14,"list":["🍤","🔮","🚀","🦇","🦇","🦇","🦑","🍪","🍪","🍪","🍪","🍪","🍪","🍪","🍪","🍪","🍪","🔮","🍪","🔮","🔮","🍤"]},{"wd":"Thu","h":15,"list":["🍤","🍤","🐉","🌳","🌳","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","✨","🦄","✨","🦄"]},{"wd":"Thu","h":16,"list":["✨","✨","🦖","🦄","✨","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🦖","🦄","🦄","🦄","🌳","🐉","🐉","🐉","🐉","🐉","🌳","🏹","🏹","🏹","🏹","🏹","🦉","🏹","🦉","🦉","🏹","🦉","🦉","🦉","🦉"]},{"wd":"Thu","h":17,"list":["🐈‍⬛","✨","✨","🐈‍⬛","🦄","🦄","✨","🦑","🦑","🦑","🐈‍⬛"]},{"wd":"Thu","h":18,"list":["🐢","🐢","🐢","🐢","🐢","🐢","🐢","🐢","🐢","🦇","🐢","🐢","🐈‍⬛","🦇","🦇","🐈‍⬛","🐈‍⬛","🐈‍⬛","🦇","🦇","🐢"]},{"wd":"Thu","h":19,"list":["✨","✨","✨","🐍"]},{"wd":"Thu","h":20,"list":["🔮","🔮","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐢","🐢","🐢","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐍","🐍","🐢"]},{"wd":"Thu","h":21,"list":["🍤","🔮","🏹","🏹","🐉","🐉","🏹","🏹","🐉","🏹","🐉","🏹","🐉","🏹","🐉","🏹","🐉","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦆","🦆","🦆","🦆","🦆","🦆","🦆","🦆","🦆","🦆","🦆","🦆","🦆","🦆","🦆","🦆","🍤","✨","✨","🌳","🌳","🌳","🌳"]},{"wd":"Thu","h":22,"list":["🦖","🦖","🦇","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🐙","🐙","🐙","🦖","🦖","🐙","🦖","🐙","🐙","🐙","🦖","🦖","🐙","🐙","🐙","🐙","🦄","🦄","🦄","🐙","🌳","🌳","✨","✨","✨","✨","🚀","🚀","🚀","🚀"]},{"wd":"Thu","h":23,"list":["🍤","🍤","🍤","🐉","🐉","🌳","🌳"]},{"wd":"Fri","h":0,"list":["🦊","🦊","🦊","🦊","🦊","🦊","🐉","🐉","🦊","🦊","🦊","🦊","🦊","🦑","🦑","🦑","🦑","🦑","🦑","🐉","🐉","🐉","🐉","🐉","🐉"]},{"wd":"Fri","h":1,"list":["🐉","🐉","🐉"]},{"wd":"Fri","h":2,"list":["🦊","🐍"]},{"wd":"Fri","h":7,"list":["🚀","🦖","🦖","🦖","🦖"]},{"wd":"Fri","h":8,"list":["🦖","🦖","🦖","🦖","🦖","🦖"]},{"wd":"Fri","h":9,"list":["🦖","🦖","🐍","🦄","🦄","🦄","🦄","🦄","🦄","🦄","🦄"]},{"wd":"Fri","h":10,"list":["🦇","🌺","🦇","🌺","🐧","🦇","🦑","🐧","🐧","🦑","🦇"]},{"wd":"Fri","h":11,"list":["🦄","🦄","🌺","🦄","🦄","🦖","🦖","🦄","🦖","🦄","🦖","🦖","🐈‍⬛","🦄","🐈‍⬛","🐈‍⬛","🦄","🦄","🦄","🐈‍⬛","🦄","🦄","🦇","🦇"]},{"wd":"Fri","h":12,"list":["✴️","✴️","✴️","✴️","🌸","🌸","🌸","🌸","🌸","🌸","🌸","🌸","🐍","🐈‍⬛","🦇","🦇","🦇","🦇","🦖","🦇","🐈‍⬛","🐈‍⬛","✨","✨","✨","🌺","🌺","🌺","🌺","🌺"]},{"wd":"Fri","h":13,"list":["✨","✨","🟢","🟢","🟢","🟢","🟢","🟢","🟢","🟢","🟢","🟢","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🍤","🍤","🍤","🍤","🍤","🟢","🦄","🦄","🦑","🦑","🦑","🦑"]},{"wd":"Fri","h":14,"list":["🌺","🦇","🦇","🦑","🐍","🐍","🐍","🐍"]},{"wd":"Fri","h":15,"list":["🌺","🦇","🦇","🚀","🚀","🚀","🚀","🚀","🚀","🚀","🚀","🔮","🔮","🔮","🔮","🔮","🔮","🦑","🔮","🦑","🔮","🔮","🍤","🔮","🔮","🔮","🍤","🍤","🔮","🍤","🔮","🍤","🍤","🍤","🍤","🚀","🚀"]},{"wd":"Fri","h":16,"list":["🦄","🐉","🐉","🐉","🐉","🐉","🐉","🟢","🟢","🐉","🟢","🐉","🐉","🟢","🐉","🟢","🐉","🐉","🐉","🟢","🐉","🐉","🐉","🏹","🏹","🏹","🏹","🟢","🏹","🏹","🏹","🏹","🔮","🔮","🏹","🏹","🏹"]},{"wd":"Fri","h":17,"list":["⚔️","⚔️","🦇","⚔️","⚔️","🌺","🌺","🌸","⚔️","🐉","🐉","🐉","🐉","⚔️","⚔️","🐉","⚔️","🟢"]},{"wd":"Fri","h":18,"list":["🦇","🦖","🦖","🦖","🔮","🦄","🦄"]},{"wd":"Fri","h":19,"list":["🦄","🦄","⚔️","🚀","🦉","🦉","🦉","🦉","🦉"]},{"wd":"Fri","h":20,"list":["🦖","🦄","🦖","🦄","🦄","🦄","🦄","🦄","🦄","✨","✨","✨","✨","✨","🦄"]},{"wd":"Fri","h":21,"list":["⚔️"]},{"wd":"Fri","h":22,"list":["🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🚀","🚀","🚀","🚀","🦖","🦖","🦖","🦖","🌺"]},{"wd":"Fri","h":23,"list":["⚔️","✨","✨","✨","⚔️","✨","✨","✨","✨","✨","✨","🦄","🦄","🦄","🦄","🦄","🦄","🦄","🦄","🦄"]},{"wd":"Sat","h":0,"list":["⚔️"]},{"wd":"Sat","h":1,"list":["🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖"]},{"wd":"Sat","h":8,"list":["🦄","🦖","🦑","🦑","🦊","🦑","🦊"]},{"wd":"Sat","h":9,"list":["🚀","🦖","🦖","🦄","🦄","🐈‍⬛","🦀","✨","✨","🦀","✨","🦀","✨","🦀","🐈‍⬛","🦈","🦀","✨","🦀","🦈","✨","🦈","✨","🦈","✨","✨","🐧","✨","🐧","🐧","🦀","✨","🦀","🦀","🐧","🐧","🦀","✨"]},{"wd":"Sat","h":10,"list":["🦀","🦀","🦀","🦄","🦈","🦄","🦄","🦈","🐈‍⬛","✨"]},{"wd":"Sat","h":12,"list":["🚀","🚀","🚀"]},{"wd":"Sat","h":13,"list":["✨","✨","🦄","🦄","🐍","🦖","🦖","🦖","🦖","🦄","🦖","🐈‍⬛","🦇","🦇","🐈‍⬛","🐈‍⬛","🐈‍⬛","🦇","🐈‍⬛","🐈‍⬛","🦇","🐈‍⬛","🐈‍⬛"]},{"wd":"Sat","h":14,"list":["🦖","🦄","🦄","🦄","🦖","🎱","🎱","🎱","🎱","🎱","🍤","🍤","🍤","🍤","🔮","🔮","🔮","🟢","🐉","🔮","🍤","🐉","🐉","🐉","🟢","🐉","🐉","🍤","🟢","🟢","🟢","🟢","🔮","🦄","🎱","🦄","🦄","🦖","🦖","🦖","🦖","🦖"]},{"wd":"Sat","h":15,"list":["🦄","🚀","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉"]},{"wd":"Sat","h":16,"list":["🚀","⚔️","⚔️","⚔️","🐉","🦖","🦄","🐉","⚔️"]},{"wd":"Sat","h":17,"list":["✨","🐉","✨","✨","✨","✨"]},{"wd":"Sat","h":18,"list":["🦑","🦑","🦑","🦑","🦑","🦄"]},{"wd":"Sat","h":19,"list":["🚀","🚀","🚀"]},{"wd":"Sat","h":20,"list":["🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦋","🦄","🦄","🍤","🍤"]},{"wd":"Sat","h":21,"list":["🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐉","🐉","🐉","🦖","🦖","🦖","🦖","🦖","🦄","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉"]},{"wd":"Sat","h":22,"list":["🦋","🦋","🦋","🦋","🦋","🦋","🦋","🦋"]},{"wd":"Sat","h":23,"list":["⚔️","⚔️","⚔️","⚔️","⚔️","🚀","🚀","🚀","🚀","🚀","🔮","🔮","🔮","🔮","🔮","🔮"]},{"wd":"Sun","h":0,"list":["🐧","🐧","🐧","🐧","🐧","🐧","🐧","🐧"]},{"wd":"Sun","h":1,"list":["✨","✨","✨","✨","✨","✨"]},{"wd":"Sun","h":5,"list":["🦖","🦖","🦖","🦖"]},{"wd":"Sun","h":8,"list":["🔮","✨","✨","✨"]},{"wd":"Sun","h":12,"list":["🔮","🔮","🔮","🔮","✨","✨","✨","✨","✨","✨","🔮","✨","🔮","🔮","🔮","🔮","✨","🐈‍⬛","🐈‍⬛"]},{"wd":"Sun","h":13,"list":["🍤","🍤","🍤","🍤","🍤","🦄","🦄","🦄","🦄","🦄"]},{"wd":"Sun","h":14,"list":["✨","✨","✨","✨","✨","⚔️","⚔️"]},{"wd":"Sun","h":15,"list":["🦄","🦄","🦄","🦄","⚔️","⚔️","⚔️","⚔️","⚔️","🚀","🚀","🚀","🚀","🚀"]},{"wd":"Sun","h":16,"list":["🦄","🦄","🦄","🦄","🦄","🦄"]},{"wd":"Sun","h":17,"list":["🦄","🦄","🦄","🦄","🍤","🍤","🍤","🦄"]},{"wd":"Sun","h":18,"list":["🦄","🦄","🦄"]},{"wd":"Sun","h":19,"list":["🚀","🚀","🚀","✨","✨","✨","🔮","⚔️"]},{"wd":"Sun","h":20,"list":["🍤","🍤","🦄"]},{"wd":"Sun","h":22,"list":["🚀","🚀","🚀","🚀"]},{"wd":"Sun","h":23,"list":["🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🦄","🦄","🦄","🦄","🦄","🦄"]},{"wd":"Mon","h":3,"list":["🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉"]},{"wd":"Mon","h":8,"list":["🦄","🦄","🦄","🦖","🦖"]},{"wd":"Mon","h":9,"list":["🌺","🦇","🦇","🌺"]},{"wd":"Mon","h":10,"list":["🌺","🦇","🌺","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉","🐉"]},{"wd":"Mon","h":11,"list":["🐉","🌺"]},{"wd":"Mon","h":12,"list":["🔮","🔮","🔮","🔮","🔮","🔮","🔮","🔮","🔮","🦈","🦈","🦈","🦈","🦈","🦈","🦈","🦈"]},{"wd":"Mon","h":13,"list":["🐉","🐉","🐉","🐉","✨","✨","✨","✨","✨","✨","✨","✨","✨","✨","✨","✨"]},{"wd":"Mon","h":14,"list":["🌺","🌺","🌸","🌸","🌸","🌸","🌸","🌸","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🐈‍⬛","🦇","🦇","🦇","🦇","🦇","🦇","🦇","🦇"]},{"wd":"Mon","h":15,"list":["🔮","🔮","🔮"]},{"wd":"Mon","h":16,"list":["🦄"]},{"wd":"Mon","h":17,"list":["🌺","🌺","🌺","🌺","🌺","🌺","🦇","🦇"]},{"wd":"Mon","h":19,"list":["🐉","🐉","🐉"]},{"wd":"Mon","h":20,"list":["🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖","🦖"]},{"wd":"Mon","h":22,"list":["🚀","🚀","🚀","🚀","🚀","🚀","🚀","🚀","🚀","🚀","🚀","🚀","🚀","🚀"]},{"wd":"Mon","h":23,"list":["✨","✨","✨"]}],
+ perDay:[{day:"Thu",stickers:503,players:40},{day:"Fri",stickers:296,players:25},{day:"Sat",stickers:232,players:23},{day:"Sun",stickers:118,players:12},{day:"Mon",stickers:134,players:14}],
+ cats:[["Animals",803],["Symbols",129],["Objects",114],["Travel",74],["Food",64],["Plants",55],["Activities",44]],
+ emoji:[["🦖",188],["🐉",161],["🦄",140],["✨",100],["🔮",82],["🚀",74],["🐈‍⬛",55],["🍤",53],["🦇",43],["🦑",36],["⚔️",32],["🏹",29]],
+ retention:[{day:"Thu",returning:0,neu:40},{day:"Fri",returning:19,neu:6},{day:"Sat",returning:18,neu:5},{day:"Sun",returning:12,neu:0},{day:"Mon",returning:13,neu:1}],
+ roster:[{"who":"Inkwell Automaton","stickers":97,"topEmoji":"🦄","topN":97,"distinct":1,"bingos":34,"corners":4,"border":1,"blackout":1,"days":5,"first":"Thu 13:10","last":"Mon 08:09","byDay":[{"day":"Thu","stickers":24,"bingos":10,"corners":1,"border":0,"blackout":0},{"day":"Fri","stickers":25,"bingos":12,"corners":1,"border":1,"blackout":1},{"day":"Sat","stickers":21,"bingos":4,"corners":1,"border":0,"blackout":0},{"day":"Sun","stickers":24,"bingos":8,"corners":1,"border":0,"blackout":0},{"day":"Mon","stickers":3,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Rambling Pilgrim","stickers":76,"topEmoji":"🦖","topN":76,"distinct":1,"bingos":28,"corners":3,"border":1,"blackout":1,"days":5,"first":"Thu 13:39","last":"Mon 08:54","byDay":[{"day":"Thu","stickers":24,"bingos":10,"corners":1,"border":0,"blackout":0},{"day":"Fri","stickers":25,"bingos":12,"corners":1,"border":1,"blackout":1},{"day":"Sat","stickers":21,"bingos":6,"corners":1,"border":0,"blackout":0},{"day":"Sun","stickers":4,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Mon","stickers":2,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Iron Ranger","stickers":74,"topEmoji":"🚀","topN":74,"distinct":1,"bingos":5,"corners":0,"border":0,"blackout":0,"days":5,"first":"Thu 00:20","last":"Mon 22:27","byDay":[{"day":"Thu","stickers":19,"bingos":2,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":15,"bingos":2,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":14,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sun","stickers":12,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Mon","stickers":14,"bingos":1,"corners":0,"border":0,"blackout":0}]},{"who":"Weathered Envoy","stickers":72,"topEmoji":"🔮","topN":72,"distinct":1,"bingos":8,"corners":0,"border":0,"blackout":0,"days":5,"first":"Thu 08:17","last":"Mon 15:14","byDay":[{"day":"Thu","stickers":21,"bingos":5,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":17,"bingos":2,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":12,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sun","stickers":10,"bingos":1,"corners":0,"border":0,"blackout":0},{"day":"Mon","stickers":12,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Obsidian Obelisk","stickers":60,"topEmoji":"✨","topN":60,"distinct":1,"bingos":6,"corners":0,"border":0,"blackout":0,"days":5,"first":"Thu 00:29","last":"Mon 23:54","byDay":[{"day":"Thu","stickers":21,"bingos":4,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":19,"bingos":2,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":9,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sun","stickers":8,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Mon","stickers":3,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Mellow Chimera","stickers":58,"topEmoji":"🐉","topN":58,"distinct":1,"bingos":8,"corners":1,"border":0,"blackout":0,"days":4,"first":"Thu 10:51","last":"Sun 23:39","byDay":[{"day":"Thu","stickers":21,"bingos":6,"corners":1,"border":0,"blackout":0},{"day":"Fri","stickers":16,"bingos":2,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":11,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sun","stickers":10,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Plum Minotaur","stickers":53,"topEmoji":"🍤","topN":53,"distinct":1,"bingos":7,"corners":0,"border":0,"blackout":0,"days":4,"first":"Thu 08:17","last":"Sun 20:30","byDay":[{"day":"Thu","stickers":22,"bingos":6,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":13,"bingos":1,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":8,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sun","stickers":10,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Jagged Wanderer","stickers":49,"topEmoji":"🟢","topN":25,"distinct":2,"bingos":14,"corners":1,"border":0,"blackout":0,"days":3,"first":"Thu 00:23","last":"Sat 14:24","byDay":[{"day":"Thu","stickers":24,"bingos":10,"corners":1,"border":0,"blackout":0},{"day":"Fri","stickers":19,"bingos":4,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":6,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Tidal Gargoyle","stickers":48,"topEmoji":"🐈‍⬛","topN":48,"distinct":1,"bingos":3,"corners":1,"border":0,"blackout":0,"days":5,"first":"Thu 17:09","last":"Mon 14:40","byDay":[{"day":"Thu","stickers":16,"bingos":1,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":4,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":15,"bingos":2,"corners":0,"border":0,"blackout":0},{"day":"Sun","stickers":2,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Mon","stickers":11,"bingos":0,"corners":1,"border":0,"blackout":0}]},{"who":"Bronze Wyvern","stickers":46,"topEmoji":"🐉","topN":46,"distinct":1,"bingos":4,"corners":0,"border":0,"blackout":0,"days":3,"first":"Sat 15:51","last":"Mon 19:25","byDay":[{"day":"Sat","stickers":15,"bingos":1,"corners":0,"border":0,"blackout":0},{"day":"Sun","stickers":13,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Mon","stickers":18,"bingos":3,"corners":0,"border":0,"blackout":0}]},{"who":"Bronze Yeti","stickers":40,"topEmoji":"✨","topN":40,"distinct":1,"bingos":2,"corners":0,"border":0,"blackout":0,"days":3,"first":"Sat 09:57","last":"Mon 13:26","byDay":[{"day":"Sat","stickers":17,"bingos":2,"corners":0,"border":0,"blackout":0},{"day":"Sun","stickers":11,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Mon","stickers":12,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Moonlit Satyr","stickers":33,"topEmoji":"🦖","topN":33,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":3,"first":"Thu 21:16","last":"Sat 20:04","byDay":[{"day":"Thu","stickers":14,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":10,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":9,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Radiant Orrery","stickers":31,"topEmoji":"⚔️","topN":31,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":4,"first":"Thu 10:49","last":"Sun 19:54","byDay":[{"day":"Thu","stickers":1,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":13,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":9,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sun","stickers":8,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Humming Comet","stickers":30,"topEmoji":"🦄","topN":30,"distinct":1,"bingos":1,"corners":0,"border":0,"blackout":0,"days":4,"first":"Thu 00:28","last":"Mon 16:18","byDay":[{"day":"Thu","stickers":10,"bingos":1,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":13,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sun","stickers":6,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Mon","stickers":1,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Candlelit Lodestar","stickers":30,"topEmoji":"🦑","topN":30,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":3,"first":"Thu 10:10","last":"Sat 18:02","byDay":[{"day":"Thu","stickers":13,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":9,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":8,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Muted Dryad","stickers":30,"topEmoji":"🦇","topN":30,"distinct":1,"bingos":2,"corners":1,"border":0,"blackout":0,"days":2,"first":"Fri 10:51","last":"Mon 17:50","byDay":[{"day":"Fri","stickers":17,"bingos":1,"corners":1,"border":0,"blackout":0},{"day":"Mon","stickers":13,"bingos":1,"corners":0,"border":0,"blackout":0}]},{"who":"Crimson Herald","stickers":29,"topEmoji":"🏹","topN":29,"distinct":1,"bingos":4,"corners":1,"border":0,"blackout":0,"days":2,"first":"Thu 12:32","last":"Fri 16:50","byDay":[{"day":"Thu","stickers":18,"bingos":4,"corners":1,"border":0,"blackout":0},{"day":"Fri","stickers":11,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Glimmer Astronaut","stickers":27,"topEmoji":"🌺","topN":27,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":3,"first":"Thu 08:07","last":"Mon 17:49","byDay":[{"day":"Thu","stickers":1,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":13,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Mon","stickers":13,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Vermillion Envoy","stickers":26,"topEmoji":"🐍","topN":26,"distinct":1,"bingos":2,"corners":0,"border":0,"blackout":0,"days":3,"first":"Thu 00:13","last":"Sat 13:27","byDay":[{"day":"Thu","stickers":19,"bingos":2,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":6,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":1,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Cinder Roc","stickers":26,"topEmoji":"🐧","topN":26,"distinct":1,"bingos":2,"corners":0,"border":0,"blackout":0,"days":3,"first":"Thu 09:30","last":"Sun 00:41","byDay":[{"day":"Thu","stickers":10,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":3,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":13,"bingos":2,"corners":0,"border":0,"blackout":0}]},{"who":"Humming Trilobite","stickers":23,"topEmoji":"🦊","topN":23,"distinct":1,"bingos":6,"corners":0,"border":0,"blackout":0,"days":2,"first":"Thu 13:22","last":"Sat 08:43","byDay":[{"day":"Thu","stickers":21,"bingos":6,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":2,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Crimson Gargoyle","stickers":23,"topEmoji":"🦖","topN":23,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":2,"first":"Thu 22:06","last":"Fri 22:35","byDay":[{"day":"Thu","stickers":11,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":12,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Dusky Navigator","stickers":22,"topEmoji":"🦆","topN":22,"distinct":1,"bingos":7,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 12:33","last":"Thu 21:32","byDay":[{"day":"Thu","stickers":22,"bingos":7,"corners":0,"border":0,"blackout":0}]},{"who":"Dusty Sundial","stickers":22,"topEmoji":"🦖","topN":22,"distinct":1,"bingos":5,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 22:07","last":"Thu 22:08","byDay":[{"day":"Thu","stickers":22,"bingos":5,"corners":0,"border":0,"blackout":0}]},{"who":"Solemn Menagerie","stickers":18,"topEmoji":"🦖","topN":18,"distinct":1,"bingos":3,"corners":0,"border":0,"blackout":0,"days":1,"first":"Mon 20:49","last":"Mon 20:49","byDay":[{"day":"Mon","stickers":18,"bingos":3,"corners":0,"border":0,"blackout":0}]},{"who":"Opal Satellite","stickers":16,"topEmoji":"🦖","topN":16,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 12:10","last":"Thu 13:58","byDay":[{"day":"Thu","stickers":16,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Marbled Prism","stickers":16,"topEmoji":"🐢","topN":16,"distinct":1,"bingos":1,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 18:02","last":"Thu 20:54","byDay":[{"day":"Thu","stickers":16,"bingos":1,"corners":0,"border":0,"blackout":0}]},{"who":"Ochre Chimera","stickers":15,"topEmoji":"🎱","topN":15,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":2,"first":"Thu 12:11","last":"Sat 14:33","byDay":[{"day":"Thu","stickers":9,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":6,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Mellow Roc","stickers":15,"topEmoji":"🌸","topN":15,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":2,"first":"Fri 12:20","last":"Mon 14:24","byDay":[{"day":"Fri","stickers":9,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Mon","stickers":6,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Curious Monolith","stickers":14,"topEmoji":"🦈","topN":14,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":2,"first":"Sat 09:58","last":"Mon 12:30","byDay":[{"day":"Sat","stickers":6,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Mon","stickers":8,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Nettle Lighthouse","stickers":13,"topEmoji":"🌳","topN":13,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 12:24","last":"Thu 23:57","byDay":[{"day":"Thu","stickers":13,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Hazel Satyr","stickers":13,"topEmoji":"🦀","topN":13,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Sat 09:57","last":"Sat 10:00","byDay":[{"day":"Sat","stickers":13,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Zephyr Tinkerer","stickers":12,"topEmoji":"🦄","topN":12,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":2,"first":"Thu 12:16","last":"Fri 20:30","byDay":[{"day":"Thu","stickers":6,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Fri","stickers":6,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Hushed Lodestar","stickers":12,"topEmoji":"🐙","topN":12,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 22:08","last":"Thu 22:10","byDay":[{"day":"Thu","stickers":12,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Glimmer Echo","stickers":11,"topEmoji":"🔮","topN":10,"distinct":2,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 13:43","last":"Thu 13:44","byDay":[{"day":"Thu","stickers":11,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Inkwell Pixie","stickers":11,"topEmoji":"🐉","topN":11,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 16:06","last":"Fri 01:49","byDay":[{"day":"Thu","stickers":11,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Jagged Wayfarer","stickers":10,"topEmoji":"🍪","topN":10,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 14:54","last":"Thu 14:55","byDay":[{"day":"Thu","stickers":10,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Candlelit Knight","stickers":9,"topEmoji":"🦇","topN":9,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":2,"first":"Thu 18:20","last":"Sat 13:57","byDay":[{"day":"Thu","stickers":5,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":4,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Curious Minotaur","stickers":9,"topEmoji":"🦋","topN":9,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Sat 20:06","last":"Sat 22:35","byDay":[{"day":"Sat","stickers":9,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Wandering Undine","stickers":8,"topEmoji":"🐉","topN":8,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Fri 00:16","last":"Fri 00:36","byDay":[{"day":"Thu","stickers":8,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Winking Talisman","stickers":8,"topEmoji":"🐉","topN":8,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":2,"first":"Fri 17:40","last":"Sat 17:27","byDay":[{"day":"Fri","stickers":5,"bingos":0,"corners":0,"border":0,"blackout":0},{"day":"Sat","stickers":3,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Winking Wayfarer","stickers":7,"topEmoji":"🐢","topN":7,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 10:52","last":"Thu 10:53","byDay":[{"day":"Thu","stickers":7,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Yonder Paladin","stickers":7,"topEmoji":"🦉","topN":7,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 16:53","last":"Thu 16:54","byDay":[{"day":"Thu","stickers":7,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Plum Paladin","stickers":7,"topEmoji":"🐈‍⬛","topN":7,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Fri 11:25","last":"Fri 12:50","byDay":[{"day":"Fri","stickers":7,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Verdant Orrery","stickers":6,"topEmoji":"🐉","topN":6,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 10:51","last":"Thu 10:53","byDay":[{"day":"Thu","stickers":6,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Antique Astronaut","stickers":6,"topEmoji":"🦑","topN":6,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Fri 00:26","last":"Fri 00:27","byDay":[{"day":"Thu","stickers":6,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Vermillion Manticore","stickers":5,"topEmoji":"🦉","topN":5,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Fri 19:58","last":"Fri 19:59","byDay":[{"day":"Fri","stickers":5,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Radiant Envoy","stickers":4,"topEmoji":"✴️","topN":4,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Fri 12:07","last":"Fri 12:07","byDay":[{"day":"Fri","stickers":4,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Emerald Archivist","stickers":3,"topEmoji":"🦇","topN":3,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 14:30","last":"Thu 14:30","byDay":[{"day":"Thu","stickers":3,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Umber Trilobite","stickers":1,"topEmoji":"⚔️","topN":1,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 11:08","last":"Thu 11:08","byDay":[{"day":"Thu","stickers":1,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Willow Orrery","stickers":1,"topEmoji":"🍪","topN":1,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 14:54","last":"Thu 14:54","byDay":[{"day":"Thu","stickers":1,"bingos":0,"corners":0,"border":0,"blackout":0}]},{"who":"Rambling Satellite","stickers":1,"topEmoji":"🦇","topN":1,"distinct":1,"bingos":0,"corners":0,"border":0,"blackout":0,"days":1,"first":"Thu 22:06","last":"Thu 22:06","byDay":[{"day":"Thu","stickers":1,"bingos":0,"corners":0,"border":0,"blackout":0}]}]
+};
+const EMOJI_COL={"🦖":"#7ee06a","🐉":"#b483e6","🦄":"#ff6fae","✨":"#f7d117","🔮":"#9b5dc4","🚀":"#6fb8ff","🐈‍⬛":"#c9b8e0","🍤":"#ff9d5c","🦇":"#8a7dff","🦑":"#18dcc0","⚔️":"#b8c4d0","🏹":"#ffb638"};
+const ecol=e=>EMOJI_COL[e]||"#9b7fc0";
+const TOTAL=1283;
+const SVGNS="http://www.w3.org/2000/svg";
+const el=(n,a={})=>{const e=document.createElementNS(SVGNS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const cvar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const DLBL=["Thu","Fri","Sat","Sun","Mon"];
+const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+document.getElementById("strip").innerHTML=D.strip.map(s=>`<div class="stat"><b>${s.n.toLocaleString()+s.suf}${s.sm}</b><span>${s.label}</span></div>`).join("");
+
+function sqCells(list){return list.map(s=>`
+  <div class="sqitem"><div class="sqchip"><span class="em">${s.emoji}</span></div>
+    <div class="txt">${esc(s.text)}<b>${s.day}</b></div>
+    <div class="cnt">${s.n}<small>×</small></div></div>`).join("");}
+document.getElementById("sqHot").innerHTML=sqCells(D.hot);
+document.getElementById("sqCold").innerHTML=sqCells(D.cold);
+
+document.getElementById("bingotiles").innerHTML=D.bingo.map(t=>
+  `<div class="tile ${t.cls}"><span class="tile__ico">${t.ico}</span><div class="tile__n">${t.n}</div><div class="tile__label">${t.label}</div></div>`).join("");
+
+// emoji towers, grouped and colored by day, drawn on ONE canvas.
+// The DOM version placed ~1,100 live emoji nodes and crashed mobile webviews;
+// a canvas is a single element and one raster pass. Same look: literal emoji
+// stacked into per-hour towers, day-coloured, horizontally scrollable.
+(function(){
+  const CAP=26, DPR=Math.min(window.devicePixelRatio||1,1.5);
+  const DAYC={Thu:"#f7d117",Fri:"#ff6fae",Sat:"#18dcc0",Sun:"#b483e6",Mon:"#6fb8ff"};
+  const FULL={Thu:"Thursday",Fri:"Friday",Sat:"Saturday",Sun:"Sunday",Mon:"Monday"};
+  const order=["Thu","Fri","Sat","Sun","Mon"];
+  const EMOJI_FONT='17px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+  const byDay={};D.towers.forEach(c=>(byDay[c.wd]=byDay[c.wd]||[]).push(c));
+  const days=order.filter(d=>byDay[d]);
+  const COLW=24, GH=18, TITLE=32, HRLAB=22, TOP=22, DAYPAD=8, DAYGAP=12;
+
+  let maxN=0; days.forEach(d=>byDay[d].forEach(c=>{maxN=Math.max(maxN,Math.min(c.list.length,CAP));}));
+  const towerH=maxN*GH, baseY=TITLE+TOP+towerH, H=baseY+HRLAB+6;
+
+  let W=0; const dayW={},dayX={};
+  days.forEach(d=>{dayX[d]=W; dayW[d]=DAYPAD*2+byDay[d].length*COLW; W+=dayW[d]+DAYGAP;});
+  W-=DAYGAP;
+
+  const cv=document.getElementById("towers");
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  cv.style.width=W+"px"; cv.style.height=H+"px";
+  const ctx=cv.getContext("2d"); ctx.scale(DPR,DPR);
+
+  const hexA=(hex,a)=>{const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;};
+  function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+  days.forEach(d=>{
+    const x0=dayX[d], dw=dayW[d], c=DAYC[d], cols=byDay[d];
+    ctx.fillStyle=hexA(c,0.10); roundRect(x0,TITLE-4,dw,baseY-TITLE+6,10); ctx.fill();
+    ctx.fillStyle=c; ctx.textAlign="center"; ctx.textBaseline="alphabetic";
+    ctx.font='700 15px "Space Grotesk",monospace'; ctx.fillText(FULL[d], x0+dw/2, 21);
+    ctx.strokeStyle=c; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x0+8,TITLE-2); ctx.lineTo(x0+dw-8,TITLE-2); ctx.stroke();
+
+    cols.forEach((col,i)=>{
+      const cx=x0+DAYPAD+i*COLW+COLW/2;
+      const show=col.list.slice(0,CAP), over=col.list.length-show.length;
+      // Opaque fill: colour emoji honour the paint alpha, and the hour-label
+      // fill below leaves it at .5 — without this reset every column after the
+      // first would draw at half opacity.
+      ctx.textBaseline="middle"; ctx.font=EMOJI_FONT; ctx.fillStyle="#e7dcf4";
+      for(let k=0;k<show.length;k++) ctx.fillText(show[k], cx, baseY-GH/2-k*GH);
+      if(over>0){ctx.save();ctx.fillStyle=c; ctx.font='700 11px "Space Grotesk",monospace'; ctx.shadowColor="rgba(20,6,32,.9)"; ctx.shadowBlur=3; ctx.fillText("+"+over, cx, baseY-GH*show.length-7);ctx.restore();}
+      ctx.fillStyle="rgba(231,220,244,.5)"; ctx.textBaseline="alphabetic"; ctx.font='11px "Space Grotesk",monospace';
+      ctx.fillText((col.h%12||12)+(col.h<12?"a":"p"), cx, baseY+14);
+    });
+  });
+})();
+
+// daily
+(function(){const mS=Math.max(...D.perDay.map(d=>d.stickers)),mP=Math.max(...D.perDay.map(d=>d.players));
+  document.getElementById("days").innerHTML=D.perDay.map(d=>`
+   <div class="daygrp"><div class="dn">${d.day}</div>
+     <div class="dbar"><div class="track"><div class="fill fill--s" style="width:${d.stickers/mS*100}%"></div></div><span class="vlab">${d.stickers} stickers</span></div>
+     <div class="dbar"><div class="track"><div class="fill fill--p" style="width:${d.players/mP*100}%"></div></div><span class="vlab">${d.players} players</span></div></div>`).join("");})();
+
+// retention chart
+(function(){const svg=document.getElementById("ret");const data=D.retention,W=1000,H=320,padL=54,padR=16,padT=30,padB=48;
+  const max=Math.max(...data.map(d=>d.returning+d.neu));
+  const bw=(W-padL-padR)/data.length*0.46,cx=i=>padL+(i+0.5)*(W-padL-padR)/data.length;
+  const y=v=>padT+(H-padT-padB)*(1-v/max),base=y(0);
+  [0,10,20,30,40].forEach(g=>{if(g>max)return;svg.append(el("line",{class:"gridline",x1:padL,x2:W-padR,y1:y(g),y2:y(g)}));
+    const t=el("text",{class:"axis",x:padL-10,y:y(g)+5,"text-anchor":"end"});t.textContent=g;svg.append(t);});
+  const ret=cvar("--purple"),nw=cvar("--play");
+  data.forEach((d,i)=>{const x0=cx(i)-bw/2,hR=base-y(d.returning),hN=base-y(d.neu);
+    if(d.returning)svg.append(el("rect",{x:x0,y:base-hR,width:bw,height:hR,rx:3,fill:ret}));
+    if(d.neu){const yN=base-hR-hN-(d.returning?2:0);svg.append(el("rect",{x:x0,y:yN,width:bw,height:hN,rx:3,fill:nw}));}
+    const tot=d.returning+d.neu,tt=el("text",{class:"axis",x:cx(i),y:y(tot)-10,"text-anchor":"middle",fill:cvar("--ink")});tt.textContent=tot;tt.style.fontWeight=700;tt.style.fontSize="15px";svg.append(tt);
+    const dl=el("text",{x:cx(i),y:H-padB+26,"text-anchor":"middle"});dl.style.fontFamily=cvar("--font-d");dl.style.fontWeight="700";dl.style.fontSize="17px";dl.style.fill=cvar("--ink-2");dl.textContent=DLBL[i];svg.append(dl);});})();
+
+// bars
+function bars(id,data,fmt,color){const max=Math.max(...data.map(d=>d[1]));
+  document.getElementById(id).innerHTML=data.map(([k,v])=>{const c=color?color(k):"linear-gradient(90deg,#9b5dc4,#ff6fae)";
+   return `<div class="brow"><div class="lbl">${fmt(k)}</div><div class="track"><div class="fill" style="width:${Math.max(2,v/max*100)}%;background:${c}"></div></div><div class="val">${v}</div></div>`;}).join("");}
+bars("cats",D.cats,k=>k,null);
+bars("emoji",D.emoji,k=>`<span class="em">${k}</span>`,k=>{const c=ecol(k);return `linear-gradient(90deg, ${c}aa, ${c})`;});
+
+// roster
+(function(){
+  document.getElementById("roster").innerHTML=D.roster.map((p,i)=>{
+    const cls=i===0?"mythic":(i<5?"top5":"");
+    const c=v=>`<span class="c${v?"":" z"}">${v||"·"}</span>`;
+    return `<button class="prow ${cls}" data-i="${i}">
+      <span class="rk">${i+1}</span><span class="pe">${p.topEmoji}</span>
+      <span class="nm">${esc(p.who)}</span>
+      <span class="sk"><span class="n">${p.stickers}</span></span>
+      <span class="c${p.bingos?"":" z"}">${p.bingos||"·"}</span>${c(p.corners)}${c(p.border)}${c(p.blackout)}
+    </button>`;}).join("");})();
+
+// modal
+const ovl=document.getElementById("ovl"),modal=document.getElementById("modal");
+function openPlayer(i){
+  const p=D.roster[i];const rank=i+1;const share=(p.stickers/TOTAL*100);
+  const best=p.byDay.slice().sort((a,b)=>b.stickers-a.stickers)[0];
+  const feats=[];if(p.blackout)feats.push(p.blackout+"× blackout");if(p.border)feats.push(p.border+"× border");if(p.corners)feats.push(p.corners+"× four corners");
+  const mythic=i===0;
+  const rows=p.byDay.map(d=>`<tr><td>${d.day}</td><td>${d.stickers}</td><td class="${d.bingos?"":"z"}">${d.bingos||"·"}</td>
+    <td class="${d.corners?"":"z"}">${d.corners||"·"}</td><td class="${d.border?"":"z"}">${d.border||"·"}</td><td class="${d.blackout?"":"z"}">${d.blackout||"·"}</td></tr>`).join("");
+  const sig=ecol(p.topEmoji);modal.style.setProperty("--sig",sig);
+  modal.innerHTML=`
+    <button class="mx" id="mx" aria-label="Close">✕</button>
+    <div class="mtop"></div>
+    <div class="mhead"><span class="me">${p.topEmoji}</span><div>
+      <h3>${esc(p.who)}${p.days===5?'<span class="mbadge">ALL 5 DAYS</span>':""}</h3>
+      <div class="rank${mythic?" mythic":""}">#${rank} of 52${mythic?" · Champion":""}</div></div></div>
+    <div class="mkpis">
+      <div class="mkpi mkpi--g"><b>${p.stickers}</b><span>Stickers</span></div>
+      <div class="mkpi mkpi--p"><b>${p.bingos}</b><span>Bingos</span></div>
+      <div class="mkpi mkpi--t"><b>${p.corners+p.border+p.blackout}</b><span>Feats</span></div>
+      <div class="mkpi mkpi--u"><b>${share.toFixed(1)}%</b><span>of board</span></div>
+    </div>
+    <p class="mline">Signature emoji <b>${p.topEmoji}</b> (${Math.round(p.topN/p.stickers*100)}% of their stickers)${p.distinct>1?`, plus ${p.distinct-1} other${p.distinct>2?"s":""}`:""}.
+      Busiest on <b>${best.day}</b> with ${best.stickers}. ${feats.length?"Feats: "+feats.join(", ")+".":""}</p>
+    <p class="mline">First sticker <b>${p.first}</b>, last <b>${p.last}</b>.</p>
+    <table class="mtable"><thead><tr><th>Day</th><th>Stickers</th><th>Bingo</th><th>◈</th><th>▣</th><th>★</th></tr></thead><tbody>${rows}</tbody></table>`;
+  modal.querySelector("#mx").onclick=closeModal;
+  ovl.classList.add("on");modal.querySelector("#mx").focus();
+  // Push a history entry so a back-gesture / left-swipe closes the card
+  // instead of navigating away from the board (thread a23292c5).
+  if(!modalOpen){modalOpen=true;history.pushState({dcbModal:1},"");}
+}
+let modalOpen=false;
+function hideModal(){ovl.classList.remove("on");modalOpen=false;}
+function closeModal(){if(modalOpen){history.back();}else{hideModal();}}
+addEventListener("popstate",()=>{if(modalOpen)hideModal();});
+ovl.addEventListener("click",e=>{if(e.target===ovl)closeModal();});
+addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();});
+document.getElementById("roster").addEventListener("click",e=>{const b=e.target.closest(".prow");if(b)openPlayer(+b.dataset.i);});
+const toast=document.getElementById("toast");
+function copy(t){navigator.clipboard&&navigator.clipboard.writeText(t).then(showToast,showToast)||showToast();}
+let tmr;function showToast(){toast.classList.add("on");clearTimeout(tmr);tmr=setTimeout(()=>toast.classList.remove("on"),1600);}
+
+// forms
+const fb=document.getElementById("fb"),fbSend=document.getElementById("fbSend");
+fb.addEventListener("input",()=>{fbSend.href="mailto:WyvernconTCG@gmail.com?subject="+encodeURIComponent("D-con 26 bingo feedback")+"&body="+encodeURIComponent(fb.value);});
+const su=document.getElementById("su"),suSend=document.getElementById("suSend");
+su.addEventListener("input",()=>{suSend.href="mailto:WyvernconTCG@gmail.com?subject="+encodeURIComponent("D-Con 27 Bingo signup")+"&body="+encodeURIComponent("Please include me in the 2027 Bingo. Email: "+su.value);});
+</script>
+
+</body>
+</html>

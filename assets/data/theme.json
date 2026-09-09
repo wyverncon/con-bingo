@@ -1,0 +1,54 @@
+{
+  "days": {
+    "thu": {
+      "name": "THURSDAY",
+      "accent": "#18dcc0",
+      "cell": "#72d4c8",
+      "cellOn": "#24b8a4",
+      "hue": 171,
+      "hueOwn": 22
+    },
+    "fri": {
+      "name": "FRIDAY",
+      "accent": "#44d018",
+      "cell": "#b8e070",
+      "cellOn": "#34a814",
+      "hue": 100,
+      "hueOwn": 292
+    },
+    "sat": {
+      "name": "SATURDAY",
+      "accent": "#f8d000",
+      "cell": "#ebd050",
+      "cellOn": "#c8a800",
+      "hue": 50,
+      "hueOwn": 242
+    },
+    "sun": {
+      "name": "SUNDAY",
+      "accent": "#ff5c18",
+      "cell": "#e8a060",
+      "cellOn": "#d87020",
+      "hue": 18,
+      "hueOwn": 200
+    },
+    "mon": {
+      "name": "MONDAY",
+      "accent": "#f02888",
+      "cell": "#e890b0",
+      "cellOn": "#c84070",
+      "hue": 331,
+      "hueOwn": 148
+    }
+  },
+  "dots": [
+    "#f8d000",
+    "#e7dcf4",
+    "#ffffff",
+    "#9b5dc4",
+    "#18dcc0",
+    "#ff5c18",
+    "#f02888",
+    "#44d018"
+  ]
+}

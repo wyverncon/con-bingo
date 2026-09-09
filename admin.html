@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!--
+  Content-Security-Policy (security addendum §2.3). The app is static, so this
+  meta tag is the only place a policy can live - GitHub Pages sets no headers.
+
+  script-src is 'self' with no 'unsafe-inline' and no 'unsafe-eval': every
+  script here is an external module file, and playhtml is vendored under
+  assets/vendor/ rather than pulled from a CDN (§2.4). An injected inline
+  <script> - the payload of any XSS - therefore cannot run.
+
+  connect-src names the real sync endpoint, read off the live WebSocket rather
+  than guessed: api.playhtml.fun over both https and wss.
+
+  style-src keeps 'unsafe-inline' because the ported mockup sets style
+  attributes; that cannot smuggle script. It deliberately does NOT list
+  unpkg.com, so playhtml's own request for an unpinned style.css is blocked -
+  see assets/vendor/playhtml-2.14.1/README.md.
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self';
+  connect-src 'self' https://api.playhtml.fun wss://api.playhtml.fun;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data:;
+  base-uri 'self';
+  form-action 'none';
+  object-src 'none'
+">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin — MMO Con BINGO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+<link rel="stylesheet" href="assets/css/admin.css">
+</head>
+<body>
+
+<!--
+  Data load failure (phase 6b of the tracker's JSON move). The reviewed lists
+  are fetched, not imported, so a network or 404 failure would otherwise leave a
+  blank page with the reason only in the console. Markup, revealed by
+  assets/data/load.js — never written by code (addendum section 2.2).
+-->
+<div class="loadfail" data-loadfail hidden role="alert">
+  <div class="loadfail__panel">
+    <p class="loadfail__head">Could not load the board</p>
+    <p class="loadfail__body">Some of the game's data did not arrive. This is usually the connection.</p>
+    <p class="loadfail__which" data-loadfail-list></p>
+    <button class="loadfail__go" type="button" data-loadfail-retry>Try again</button>
+  </div>
+</div>
+
+
+<!--
+  Unlinked admin console (spec section 9, ADR 0003). Linked from nowhere;
+  disallowed in robots.txt. Friction, not auth — the on-screen line says so.
+
+  Nothing below the gate shell is shown, and playhtml is not initialised,
+  until gate.js unlocks (or a still-valid 12h localStorage cache is present).
+-->
+
+<div class="gate" data-gate>
+  <div class="gate__card">
+    <!-- Which board this console writes to, so a console open on two boards is
+         not a guessing game. Filled by gate.js from the address bar - never the
+         room id, which is the one string this app keeps to itself (ADR 0002). -->
+    <h1 class="gate__title">ADMIN</h1>
+    <p class="gate__where" data-gate-where></p>
+    <form class="gate__form" data-gate-form autocomplete="off">
+      <input class="gate__input" id="gate-pass" data-gate-input type="password"
+             name="passphrase" autocomplete="current-password" aria-label="Unlock code" required>
+      <button class="gate__btn" type="submit" data-gate-submit>Unlock</button>
+      <p class="gate__err" data-gate-err hidden>That does not unlock this board</p>
+      <p class="gate__err" data-gate-unset hidden>Not sealed yet — run tools/gate-hash.html</p>
+      <!-- The unlock maths lives in SubtleCrypto, which browsers hand out only
+           to https and localhost. On a LAN dev address there is no crypto.subtle
+           at all, and without this line the button just sits there. -->
+      <p class="gate__err" data-gate-insecure hidden>This address is not one the browser will run the unlock in. Open the console at localhost, or over https.</p>
+    </form>
+  </div>
+</div>
+
+<div class="app admin" data-admin hidden>
+  <div class="app__glow" aria-hidden="true"></div>
+
+  <header class="admin__top">
+    <a class="admin__back" href="index.html" aria-label="Back to board">&lsaquo;</a>
+    <span class="admin__mark">
+      <span class="admin__mark-dot" aria-hidden="true"></span>
+      <span class="admin__mark-label">ADMIN</span>
+    </span>
+    <span class="admin__top-spacer" aria-hidden="true"></span>
+  </header>
+
+  <div class="conn" data-conn data-state="connecting" hidden>
+    <span class="conn__dot" aria-hidden="true"></span>
+    <span class="conn__label" data-conn-label>Connecting…</span>
+  </div>
+
+  <div class="daystep">
+    <button class="daystep__arrow" type="button" data-day-prev aria-label="Previous day">&lsaquo;</button>
+    <span class="daystep__name" data-day-name>&nbsp;</span>
+    <button class="daystep__arrow" type="button" data-day-next aria-label="Next day">&rsaquo;</button>
+  </div>
+
+  <!-- The board has closed for good (ADR 0036): the console still reads, and
+       writes nothing. Words authored per edition in day.js. -->
+  <div class="closed" data-closed hidden aria-live="polite">
+    <span class="closed__label" data-closed-label></span>
+  </div>
+
+  <div class="admin__stats">
+    <div class="admin__stat">
+      <div class="admin__stat-n" data-stat-stickers>0</div>
+      <div class="admin__stat-l">STICKERS</div>
+    </div>
+    <div class="admin__stat">
+      <div class="admin__stat-n" data-stat-players>0</div>
+      <div class="admin__stat-l">PLAYERS</div>
+    </div>
+    <div class="admin__stat">
+      <div class="admin__stat-n" data-stat-filled>0/25</div>
+      <div class="admin__stat-l">SQ FILLED</div>
+    </div>
+    <div class="admin__stat">
+      <div class="admin__stat-n admin__stat-n--live" data-stat-live>1</div>
+      <div class="admin__stat-l">LIVE NOW</div>
+    </div>
+  </div>
+
+  <div class="admin__heat">
+    <div class="admin__heat-head">
+      <span>HEAT MAP · TAP A SQUARE</span>
+      <span class="admin__heat-legend" aria-hidden="true">
+        <span class="admin__heat-swatch admin__heat-swatch--empty"></span>
+        <span class="admin__heat-swatch admin__heat-swatch--mid"></span>
+        <span class="admin__heat-swatch admin__heat-swatch--hot"></span>
+      </span>
+    </div>
+    <div class="admin__heat-grid" data-heat></div>
+  </div>
+
+  <div class="admin__picked" data-picked hidden>
+    <div class="admin__picked-coord" data-picked-coord></div>
+    <div class="admin__picked-text" data-picked-text></div>
+  </div>
+
+  <div class="admin__list-wrap">
+    <div class="admin__list-head" data-list-label>ALL STICKERS · NEWEST FIRST</div>
+    <div class="admin__list" data-list></div>
+  </div>
+
+  <div class="admin__actions">
+    <button class="admin__clear" type="button" data-clear disabled>SELECT A SQUARE</button>
+    <button class="admin__nuke" type="button" data-nuke>
+      <span class="admin__nuke-fill" data-nuke-fill></span>
+      <span class="admin__nuke-label" data-nuke-label>NUKE</span>
+    </button>
+  </div>
+  <p class="admin__footnote">Hold NUKE to clear the whole day. Static site — this gate is obscurity, not security.</p>
+
+  <!-- Post-con export (ADR 0036). Shown only after the freeze; downloads a
+       snapshot of every sticker in every room as archive-<year>.json. -->
+  <div class="admin__export" data-export hidden>
+    <button class="admin__export-btn" type="button" data-export-btn>EXPORT</button>
+    <p class="admin__export-note">Downloads every sticker across all five days as one JSON file. Do this before anything else.</p>
+  </div>
+</div>
+
+<script type="module" src="assets/js/admin.js"></script>
+</body>
+</html>

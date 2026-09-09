@@ -1,0 +1,204 @@
+{
+  "facts": [
+    {
+      "min": 3,
+      "max": 3,
+      "text": "one for every heart an octopus has"
+    },
+    {
+      "min": 4,
+      "max": 4,
+      "text": "one for every chamber in a cow's stomach"
+    },
+    {
+      "min": 5,
+      "max": 5,
+      "text": "one for every Great Lake"
+    },
+    {
+      "min": 1,
+      "max": 5,
+      "text": "fewer than the rings on the Olympic flag"
+    },
+    {
+      "min": 6,
+      "max": 6,
+      "text": "one for every side of a snowflake"
+    },
+    {
+      "min": 7,
+      "max": 7,
+      "text": "one for every bone in a giraffe's neck, which is also how many are in yours"
+    },
+    {
+      "min": 8,
+      "max": 8,
+      "text": "one for every leg on a spider"
+    },
+    {
+      "min": 8,
+      "max": 8,
+      "text": "one for every planet in the solar system"
+    },
+    {
+      "min": 10,
+      "max": 10,
+      "text": "one for every leg on a lobster"
+    },
+    {
+      "min": 12,
+      "max": 12,
+      "text": "one for every pair of ribs in your chest"
+    },
+    {
+      "min": 6,
+      "max": 12,
+      "text": "as many as the strings on two guitars, give or take"
+    },
+    {
+      "min": 14,
+      "max": 14,
+      "text": "one for every line in a sonnet"
+    },
+    {
+      "min": 17,
+      "max": 17,
+      "text": "one for every syllable in a haiku"
+    },
+    {
+      "min": 20,
+      "max": 20,
+      "text": "one for every side of a d20"
+    },
+    {
+      "min": 20,
+      "max": 20,
+      "text": "one for every amino acid your body builds proteins from"
+    },
+    {
+      "min": 22,
+      "max": 22,
+      "text": "one for every bone in the human skull — eight in the cranium, fourteen in the face"
+    },
+    {
+      "min": 22,
+      "max": 22,
+      "text": "one for every player on a football pitch at kickoff"
+    },
+    {
+      "min": 23,
+      "max": 23,
+      "text": "one for every pair of chromosomes you are carrying around"
+    },
+    {
+      "min": 24,
+      "max": 24,
+      "text": "one for every hour in the day"
+    },
+    {
+      "min": 24,
+      "max": 24,
+      "text": "one for every letter in the Greek alphabet"
+    },
+    {
+      "min": 25,
+      "max": 25,
+      "text": "one for every square on this card"
+    },
+    {
+      "min": 26,
+      "max": 26,
+      "text": "one for every bone in a human foot"
+    },
+    {
+      "min": 27,
+      "max": 27,
+      "text": "one for every bone in a human hand"
+    },
+    {
+      "min": 28,
+      "max": 28,
+      "text": "one for every domino in a double-six set"
+    },
+    {
+      "min": 32,
+      "max": 32,
+      "text": "one for every tooth in a full adult mouth"
+    },
+    {
+      "min": 32,
+      "max": 32,
+      "text": "one for every piece on a chessboard at the start"
+    },
+    {
+      "min": 33,
+      "max": 33,
+      "text": "one for every vertebra in a human spine"
+    },
+    {
+      "min": 40,
+      "max": 40,
+      "text": "one for every space on a Monopoly board"
+    },
+    {
+      "min": 50,
+      "max": 50,
+      "text": "one for every star on the flag"
+    },
+    {
+      "min": 26,
+      "max": 50,
+      "text": "more than the letters in the alphabet"
+    },
+    {
+      "min": 52,
+      "max": 52,
+      "text": "one for every card in the deck"
+    },
+    {
+      "min": 52,
+      "max": 52,
+      "text": "one for every week in the year"
+    },
+    {
+      "min": 64,
+      "max": 64,
+      "text": "one for every square on a chessboard"
+    },
+    {
+      "min": 88,
+      "max": 88,
+      "text": "one for every key on a piano"
+    },
+    {
+      "min": 88,
+      "max": 88,
+      "text": "one for every constellation the IAU recognises"
+    },
+    {
+      "min": 92,
+      "max": 92,
+      "text": "one for every element that occurs in nature"
+    },
+    {
+      "min": 51,
+      "max": 100,
+      "text": "more than the keys on half a piano"
+    },
+    {
+      "min": 118,
+      "max": 118,
+      "text": "one for every element on the periodic table"
+    },
+    {
+      "min": 206,
+      "max": 206,
+      "text": "one for every bone in an adult body"
+    },
+    {
+      "min": 101,
+      "max": 99999,
+      "text": "more than the bones a grown adult has left after the extra ones fuse"
+    }
+  ]
+}

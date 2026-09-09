@@ -1,0 +1,42 @@
+[
+  {
+    "id": "love",
+    "icon": "💜",
+    "label": "Love it, keep going"
+  },
+  {
+    "id": "confusing",
+    "icon": "😕",
+    "label": "Something confused me"
+  },
+  {
+    "id": "small",
+    "icon": "🔍",
+    "label": "Text is too small to read"
+  },
+  {
+    "id": "fiddly",
+    "icon": "👆",
+    "label": "Placing a sticker was fiddly"
+  },
+  {
+    "id": "slow",
+    "icon": "🐢",
+    "label": "Felt slow or out of sync"
+  },
+  {
+    "id": "broken",
+    "icon": "🐛",
+    "label": "Something looked broken"
+  },
+  {
+    "id": "squares",
+    "icon": "🎲",
+    "label": "Want different squares"
+  },
+  {
+    "id": "cap",
+    "icon": "🎯",
+    "label": "Ran out of stickers too fast"
+  }
+]
